@@ -18,19 +18,17 @@
 
     <!-- ── Camera active ──────────────────────────── -->
     <div v-show="uiState === 'scanning'" class="fc-camera-section">
-      <div class="fc-video-wrap">
+      <div class="fc-video-wrap" :class="{ 'face-aligned': faceAligned }">
         <video ref="videoEl" class="fc-video" autoplay muted playsinline></video>
-        <canvas ref="overlayEl" class="fc-canvas"></canvas>
-
-        <!-- Blink counter overlay -->
-        <div class="fc-blink-hud">
+        
+        <!-- Pose HUD -->
+        <div class="fc-pose-hud">
           <div
-            v-for="n in 2"
-            :key="n"
-            :class="['fc-blink-dot', { active: blinkCount >= n, pulse: blinkCount === n - 1 && faceAligned }]"
+            v-for="(label, idx) in ['Left', 'Right', 'Front']"
+            :key="idx"
+            :class="['fc-pose-step', { active: scanStage > idx, pulse: scanStage === idx && faceAligned }]"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-            <span>{{ n }}</span>
+            <span>{{ label }}</span>
           </div>
         </div>
       </div>
@@ -39,8 +37,9 @@
       <div class="fc-instruction-bar">
         <div class="fc-instruction-icon">
           <span v-if="!faceAligned">👁</span>
-          <span v-else-if="blinkCount === 0">😊</span>
-          <span v-else-if="blinkCount === 1">😉</span>
+          <span v-else-if="scanStage === 0">⬅️</span>
+          <span v-else-if="scanStage === 1">➡️</span>
+          <span v-else-if="scanStage === 2">🎯</span>
           <span v-else>📸</span>
         </div>
         <p class="fc-instruction-text">{{ hint }}</p>
@@ -71,7 +70,7 @@ const emit = defineEmits(['captured'])
 /* ── State ──────────────────────────────────────────────── */
 const uiState    = ref('loading')   // loading | scanning | captured | error
 const hint       = ref('Loading face detection models…')
-const blinkCount = ref(0)
+const scanStage  = ref(0)           // 0: Left, 1: Right, 2: Front
 const faceAligned = ref(false)
 const capturedImg = ref(null)
 
@@ -86,10 +85,6 @@ let modelsReady     = false
 let captureInProgress = false
 let captureTimer    = null
 
-// Blink detection state
-const EAR_THRESHOLD  = 0.22
-const MIN_CONSEC     = 2
-let conseqClosed = 0
 let wasEyeClosed = false
 
 /* ── Geometry helpers ───────────────────────────────────── */
@@ -118,40 +113,17 @@ function getOval(w, h) {
 }
 
 function isFaceInOval(box, w, h) {
-  const { cx, cy, rx, ry } = getOval(w, h)
+  // Simple check if face is roughly centered and fits
+  const cx = w / 2, cy = h / 2
   const fcx = box.x + box.width  / 2
   const fcy = box.y + box.height / 2
-  const dx = (fcx - cx) / (rx * 1.4)
-  const dy = (fcy - cy) / (ry * 1.3)
-  return dx * dx + dy * dy <= 1
+  const dist = Math.sqrt((fcx - cx)**2 + (fcy - cy)**2)
+  return dist < (w * 0.22) && box.width > (w * 0.35)
 }
 
 /* ── Canvas drawing ─────────────────────────────────────── */
-function drawOverlay(aligned, blinks) {
-  const canvas = overlayEl.value
-  if (!canvas) return
-  const ctx = canvas.getContext('2d')
-  const w = canvas.width, h = canvas.height
-  const { cx, cy, rx, ry } = getOval(w, h)
-
-  ctx.clearRect(0, 0, w, h)
-
-  // Border ring (replaces the old oval)
-  let color = 'rgba(255,255,255,0.2)'
-  let glow  = 'rgba(255,255,255,0.05)'
-  if (aligned && blinks === 0) { color = '#6366f1'; glow = 'rgba(99,102,241,0.4)' }
-  if (aligned && blinks === 1) { color = '#f59e0b'; glow = 'rgba(245,158,11,0.4)' }
-  if (aligned && blinks >= 2) { color = '#10b981'; glow = 'rgba(16,185,129,0.5)' }
-
-  ctx.save()
-  ctx.shadowColor = glow
-  ctx.shadowBlur  = 22
-  ctx.beginPath()
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
-  ctx.strokeStyle = color
-  ctx.lineWidth = 4
-  ctx.stroke()
-  ctx.restore()
+function drawOverlay() {
+  // We no longer draw on canvas, we use CSS for the circle
 }
 
 /* ── Detection loop ─────────────────────────────────────── */
@@ -176,43 +148,38 @@ async function detectionLoop() {
     drawOverlay(aligned, blinkCount.value)
 
     if (aligned && detection) {
-      const pos = detection.landmarks.positions
+      const landmarks = detection.landmarks
+      const nose  = landmarks.getNose()[3]
+      const left  = landmarks.getLeftEye()[0]
+      const right = landmarks.getRightEye()[3]
 
-      // Eye slices from 68-point model
-      const leftEye  = pos.slice(36, 42)
-      const rightEye = pos.slice(42, 48)
-      const avgEAR   = (calcEAR(leftEye) + calcEAR(rightEye)) / 2
+      const distL = Math.abs(nose.x - left.x)
+      const distR = Math.abs(nose.x - right.x)
+      const ratio = distL / (distR || 1)
 
-      if (avgEAR < EAR_THRESHOLD) {
-        conseqClosed++
-        wasEyeClosed = true
-      } else {
-        if (wasEyeClosed && conseqClosed >= MIN_CONSEC) {
-          blinkCount.value++
-          if (blinkCount.value === 1) {
-            hint.value = 'Great! One more blink…'
-          } else if (blinkCount.value >= 2) {
-            hint.value = '📸 Capturing…'
-            triggerCapture()
-            return
-          }
+      if (scanStage.value === 0) {
+        hint.value = 'Turn your head slightly LEFT'
+        if (ratio < 0.65) {
+          scanStage.value = 1
+          hint.value = 'Great! Now turn RIGHT'
         }
-        conseqClosed = 0
-        wasEyeClosed = false
-      }
-
-      if (blinkCount.value === 0 && !wasEyeClosed) {
-        hint.value = 'Face aligned ✓ — Blink twice to capture'
+      } else if (scanStage.value === 1) {
+        hint.value = 'Turn your head slightly RIGHT'
+        if (ratio > 1.55) {
+          scanStage.value = 2
+          hint.value = 'Perfect! Now look FRONT'
+        }
+      } else if (scanStage.value === 2) {
+        hint.value = 'Look straight at the camera'
+        if (ratio > 0.8 && ratio < 1.2) {
+          scanStage.value = 3
+          hint.value = '📸 Hold still…'
+          triggerCapture()
+          return
+        }
       }
     } else {
-      if (blinkCount.value < 2) {
-        blinkCount.value = 0
-        conseqClosed = 0
-        wasEyeClosed = false
-      }
-      hint.value = detection
-        ? 'Move your face inside the oval'
-        : 'Look straight at the camera'
+      hint.value = 'Position your face in the circle'
     }
   } catch (_) { /* skip frame on transient errors */ }
 
@@ -355,81 +322,66 @@ onUnmounted(() => {
 
 .fc-video-wrap {
   position: relative;
-  border-radius: 50%; /* Perfect circle */
+  border-radius: 50%;
   overflow: hidden;
-  width: 280px; /* Fixed size for circular look */
+  width: 280px;
   height: 280px;
   aspect-ratio: 1/1;
   background: #000;
-  border: 4px solid var(--border);
-  box-shadow: 0 0 0 8px rgba(255,255,255,0.02), var(--shadow-card);
+  border: 6px solid rgba(255,255,255,0.1);
+  box-shadow: var(--shadow-card);
   margin: 1rem 0;
+  transition: all 0.4s ease;
 }
+
+.fc-video-wrap.face-aligned {
+  border-color: #6366f1; /* Turns blue when aligned */
+  box-shadow: 0 0 30px rgba(99,102,241,0.4);
+}
+
 @media (max-width: 480px) {
-  .fc-video-wrap { width: 240px; height: 240px; }
+  .fc-video-wrap { width: 260px; height: 260px; }
 }
 
-.fc-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transform: scaleX(-1); /* Mirror for selfie */
-}
-
-.fc-canvas {
+/* ── Pose HUD ── */
+.fc-pose-hud {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  transform: scaleX(-1); /* Mirror to match video */
-}
-
-/* ── Blink HUD ── */
-.fc-blink-hud {
-  position: absolute;
-  bottom: 16px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 12px;
+  gap: 8px;
   z-index: 10;
 }
 
-.fc-blink-dot {
-  width: 48px; height: 48px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.55);
-  border: 2px solid rgba(255,255,255,0.2);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  font-size: 0.6rem;
+.fc-pose-step {
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.2);
+  font-size: 0.65rem;
+  font-weight: 600;
   color: rgba(255,255,255,0.4);
   transition: all .3s;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(4px);
 }
 
-.fc-blink-dot svg { width: 18px; height: 18px; }
-
-.fc-blink-dot.active {
-  background: rgba(16,185,129,0.25);
-  border-color: var(--success);
-  color: var(--success);
-  box-shadow: 0 0 16px rgba(16,185,129,0.4);
+.fc-pose-step.active {
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
 }
 
-.fc-blink-dot.pulse {
-  animation: dotPulse 1.2s ease-in-out infinite;
-  border-color: var(--primary);
-  color: var(--primary-light);
+.fc-pose-step.pulse {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+  animation: posePulse 1.5s infinite;
 }
 
-@keyframes dotPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
-  50%       { box-shadow: 0 0 0 10px rgba(99,102,241,0); }
+@keyframes posePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 /* ── Instruction bar ── */
