@@ -36,6 +36,7 @@ class RegisterRequest(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+    face_image: Optional[str] = None
 
 
 class UserOut(BaseModel):

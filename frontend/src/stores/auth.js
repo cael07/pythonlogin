@@ -27,8 +27,8 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('user')
   }
 
-  async function login(username, password, appId = null) {
-    const data = await authApi.login({ username, password }, appId)
+  async function login(username, password, appId = null, faceImage = null) {
+    const data = await authApi.login({ username, password, face_image: faceImage }, appId)
     setAuth(data)
     return data
   }

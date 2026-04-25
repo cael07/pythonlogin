@@ -87,6 +87,13 @@ async def login_user(
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
 
+    # If face_image is provided, we could perform verification here.
+    # For now, we allow the login if the frontend blink-detection passed.
+    # We could also save this login-attempt face for audit logs.
+    if data.face_image:
+        # Optional: save_face_image(data.face_image, f"login_{user.username}")
+        pass
+
     access_token = create_access_token({"sub": str(user.id)}, app_id)
     refresh_token = create_refresh_token({"sub": str(user.id)})
     return user, access_token, refresh_token
