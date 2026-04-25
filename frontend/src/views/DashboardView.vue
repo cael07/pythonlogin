@@ -18,7 +18,11 @@
 
       <!-- User card -->
       <div class="user-card glass">
-        <div class="user-avatar">{{ initials }}</div>
+        <div v-if="user?.face_image_path" class="user-face-container">
+          <img :src="`http://localhost:8000/${user.face_image_path}`" alt="User face" class="user-face-img" />
+        </div>
+        <div v-else class="user-avatar">{{ initials }}</div>
+        
         <div class="user-info">
           <span class="user-name">{{ user?.full_name }}</span>
           <span class="user-email">{{ user?.email }}</span>
@@ -26,7 +30,7 @@
         </div>
         <div v-if="user?.face_image_path" class="user-face-badge">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 11.5c0 .828-.448 1.5-1 1.5s-1-.672-1-1.5.448-1.5 1-1.5 1 .672 1 1.5zm5 0c0 .828-.448 1.5-1 1.5s-1-.672-1-1.5.448-1.5 1-1.5 1 .672 1 1.5zM12 18c-2.28 0-4.22-.97-5.49-2.5h10.98C16.22 17.03 14.28 18 12 18zM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10z"/></svg>
-          Face ID Active
+          Face ID Verified
         </div>
       </div>
 
@@ -119,17 +123,29 @@ function handleLogout() {
   flex-wrap: wrap;
 }
 
-.user-avatar {
-  width: 60px; height: 60px;
+.user-avatar, .user-face-container {
+  width: 80px; height: 80px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), #7c3aed);
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.3rem;
+  flex-shrink: 0;
+  border: 3px solid rgba(255,255,255,0.1);
+}
+
+.user-avatar {
+  background: linear-gradient(135deg, var(--primary), #7c3aed);
+  font-size: 1.5rem;
   font-weight: 700;
   color: #fff;
-  flex-shrink: 0;
+}
+
+.user-face-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
 }
 
 .user-info {
@@ -138,9 +154,9 @@ function handleLogout() {
   gap: 0.2rem;
   flex: 1;
 }
-.user-name     { font-size: 1.05rem; font-weight: 600; }
-.user-email    { font-size: 0.85rem; color: var(--text-2); }
-.user-username { font-size: 0.8rem; color: var(--text-3); }
+.user-name     { font-size: 1.2rem; font-weight: 600; }
+.user-email    { font-size: 0.9rem; color: var(--text-2); }
+.user-username { font-size: 0.85rem; color: var(--text-3); }
 
 .user-face-badge {
   display: flex;
