@@ -3,19 +3,31 @@ import { ref, computed } from 'vue'
 import { authApi } from '../api/auth'
 
 export const useAuthStore = defineStore('auth', () => {
+  function getStoredUser() {
+    try {
+      const stored = localStorage.getItem('user')
+      if (!stored || stored === 'undefined') return null
+      return JSON.parse(stored)
+    } catch (e) {
+      return null
+    }
+  }
+
   const token = ref(localStorage.getItem('access_token') || null)
   const refreshToken = ref(localStorage.getItem('refresh_token') || null)
-  const user = ref(JSON.parse(localStorage.getItem('user') || 'null'))
+  const user = ref(getStoredUser())
 
   const isAuthenticated = computed(() => !!token.value)
 
   function setAuth(data) {
+    if (!data) return
     token.value = data.access_token
     refreshToken.value = data.refresh_token
-    user.value = data.user
-    localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
-    localStorage.setItem('user', JSON.stringify(data.user))
+    user.value = data.user || null
+    
+    if (data.access_token) localStorage.setItem('access_token', data.access_token)
+    if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token)
+    if (data.user) localStorage.setItem('user', JSON.stringify(data.user))
   }
 
   function logout() {

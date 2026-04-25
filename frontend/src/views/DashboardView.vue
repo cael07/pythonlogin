@@ -78,12 +78,17 @@ const router = useRouter()
 const user   = computed(() => auth.user)
 
 const biometricAvailable = ref(false)
-const fingerprintEnabled = ref(localStorage.getItem(`fp_${user.value?.username}`) === 'true')
+const fingerprintEnabled = ref(false)
 
 onMounted(async () => {
   try {
     const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost'
     biometricAvailable.value = !!(window.PublicKeyCredential && isSecure)
+    
+    // Check local storage for fingerprint status once user is loaded
+    if (user.value?.username) {
+      fingerprintEnabled.value = localStorage.getItem(`fp_${user.value.username}`) === 'true'
+    }
   } catch (e) {}
 })
 
