@@ -19,7 +19,7 @@
       <!-- User card -->
       <div class="user-card glass">
         <div v-if="user?.face_image_path" class="user-face-container">
-          <img :src="`http://localhost:8000/${user.face_image_path}`" alt="User face" class="user-face-img" />
+          <img :src="`/${user.face_image_path}`" alt="User face" class="user-face-img" />
         </div>
         <div v-else class="user-avatar">{{ initials }}</div>
         
