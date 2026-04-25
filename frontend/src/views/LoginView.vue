@@ -95,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import FaceCapture from '../components/FaceCapture.vue'
@@ -114,8 +114,15 @@ const error     = ref('')
 const showPwd   = ref(false)
 const touched   = ref({})
 
-const biometricSupported = ref(window.PublicKeyCredential && 
-  (window.location.protocol === 'https:' || window.location.hostname === 'localhost'))
+const biometricSupported = ref(false)
+onMounted(() => {
+  try {
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost'
+    biometricSupported.value = !!(window.PublicKeyCredential && isSecure)
+  } catch (e) {
+    // Biometric check unavailable
+  }
+})
 
 function fieldError(f) { return touched.value[f] && !form.value[f] }
 function touch(f) { touched.value[f] = true }
@@ -124,9 +131,11 @@ async function handleBiometricLogin() {
   error.value = ''
   try {
     // Check if platform authenticator (fingerprint/face) is available
-    if (window.PublicKeyCredential && 
-        PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
-      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+    const hasWebAuthn = !!(window.PublicKeyCredential && 
+        window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable)
+    
+    if (hasWebAuthn) {
+      const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
       if (!available) {
         error.value = "Biometric sensors not found on this device."
         return
