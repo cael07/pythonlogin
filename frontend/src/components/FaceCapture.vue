@@ -108,12 +108,12 @@ function calcEAR(eye) {
 /* ── Oval geometry ──────────────────────────────────────── */
 function getOval(w, h) {
   const minDim = Math.min(w, h)
-  // Scale oval based on the min dimension for mobile compatibility
+  // Larger oval for better face fitting
   return {
     cx: w / 2,
     cy: h / 2,
-    rx: minDim * 0.32,
-    ry: minDim * 0.44
+    rx: minDim * 0.38,
+    ry: minDim * 0.52
   }
 }
 
@@ -276,7 +276,7 @@ function stopCamera() {
 async function startCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+      video: { width: { ideal: 480 }, height: { ideal: 640 }, facingMode: 'user' },
     })
     const video = videoEl.value
     video.srcObject = stream
@@ -381,8 +381,8 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   overflow: hidden;
   width: 100%;
-  max-width: 520px;
-  aspect-ratio: 4/3;
+  max-width: 440px;
+  aspect-ratio: 3/4; /* Taller for mobile */
   background: #000;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
 }
