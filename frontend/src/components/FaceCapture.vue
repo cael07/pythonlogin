@@ -108,12 +108,12 @@ function calcEAR(eye) {
 /* ── Oval geometry ──────────────────────────────────────── */
 function getOval(w, h) {
   const minDim = Math.min(w, h)
-  // Larger oval for better face fitting
+  // Perfect circle guide for circular UI
   return {
     cx: w / 2,
     cy: h / 2,
-    rx: minDim * 0.38,
-    ry: minDim * 0.52
+    rx: minDim * 0.42,
+    ry: minDim * 0.42
   }
 }
 
@@ -136,24 +136,12 @@ function drawOverlay(aligned, blinks) {
 
   ctx.clearRect(0, 0, w, h)
 
-  // Dark vignette
-  ctx.fillStyle = 'rgba(4,7,30,0.62)'
-  ctx.fillRect(0, 0, w, h)
-
-  // Punch out oval (clear area = camera shows through)
-  ctx.save()
-  ctx.globalCompositeOperation = 'destination-out'
-  ctx.beginPath()
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.restore()
-
-  // Oval border
-  let color = 'rgba(255,255,255,0.3)'
-  let glow  = 'rgba(255,255,255,0.1)'
-  if (aligned && blinks === 0) { color = '#6366f1'; glow = 'rgba(99,102,241,0.5)' }
-  if (aligned && blinks === 1) { color = '#f59e0b'; glow = 'rgba(245,158,11,0.5)' }
-  if (aligned && blinks >= 2) { color = '#10b981'; glow = 'rgba(16,185,129,0.6)' }
+  // Border ring (replaces the old oval)
+  let color = 'rgba(255,255,255,0.2)'
+  let glow  = 'rgba(255,255,255,0.05)'
+  if (aligned && blinks === 0) { color = '#6366f1'; glow = 'rgba(99,102,241,0.4)' }
+  if (aligned && blinks === 1) { color = '#f59e0b'; glow = 'rgba(245,158,11,0.4)' }
+  if (aligned && blinks >= 2) { color = '#10b981'; glow = 'rgba(16,185,129,0.5)' }
 
   ctx.save()
   ctx.shadowColor = glow
@@ -161,20 +149,9 @@ function drawOverlay(aligned, blinks) {
   ctx.beginPath()
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
   ctx.strokeStyle = color
-  ctx.lineWidth = 3
+  ctx.lineWidth = 4
   ctx.stroke()
   ctx.restore()
-
-  // Corner tick marks
-  const corners = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2]
-  corners.forEach(angle => {
-    const px = cx + rx * Math.cos(angle)
-    const py = cy + ry * Math.sin(angle)
-    ctx.beginPath()
-    ctx.arc(px, py, 5, 0, Math.PI * 2)
-    ctx.fillStyle = color
-    ctx.fill()
-  })
 }
 
 /* ── Detection loop ─────────────────────────────────────── */
@@ -378,13 +355,18 @@ onUnmounted(() => {
 
 .fc-video-wrap {
   position: relative;
-  border-radius: var(--radius-md);
+  border-radius: 50%; /* Perfect circle */
   overflow: hidden;
-  width: 100%;
-  max-width: 100%; /* Fill the card */
-  aspect-ratio: 4/5; /* Taller and larger */
+  width: 280px; /* Fixed size for circular look */
+  height: 280px;
+  aspect-ratio: 1/1;
   background: #000;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
+  border: 4px solid var(--border);
+  box-shadow: 0 0 0 8px rgba(255,255,255,0.02), var(--shadow-card);
+  margin: 1rem 0;
+}
+@media (max-width: 480px) {
+  .fc-video-wrap { width: 240px; height: 240px; }
 }
 
 .fc-video {
