@@ -26,7 +26,7 @@
 
       <!-- Step 1: Credentials -->
       <Transition name="slide-up" mode="out-in">
-        <form v-if="step === 1" @submit.prevent="proceedToFaceScan" novalidate>
+        <form v-if="step === 1" @submit.prevent="handleLogin" novalidate>
           <div class="form-group">
             <label class="form-label" for="username">Username</label>
             <input
@@ -62,7 +62,7 @@
           </div>
 
           <button id="login-btn" type="submit" class="btn btn-primary" :disabled="loading">
-            <span>Continue to Face ID</span>
+            <span>Log in</span>
           </button>
 
           <!-- Biometric Login Option -->
@@ -74,16 +74,6 @@
             </button>
           </div>
         </form>
-      </Transition>
-
-      <!-- Step 2: Face Scan -->
-      <Transition name="slide-up" mode="out-in">
-        <div v-if="step === 2">
-          <FaceCapture @captured="handleFaceLogin" />
-          <button class="btn btn-ghost" style="margin-top:1rem; width:100%;" @click="step = 1">
-            ↩ Back to password
-          </button>
-        </div>
       </Transition>
 
       <div class="auth-footer">
@@ -183,27 +173,20 @@ async function handleBiometricLogin() {
   }
 }
 
-async function proceedToFaceScan() {
+async function handleLogin() {
   touch('username'); touch('password')
   if (!form.value.username || !form.value.password) {
     error.value = 'Please enter your credentials.'
     return
   }
   error.value = ''
-  step.value = 2
-}
-
-async function handleFaceLogin(img) {
-  faceImage.value = img
   loading.value = true
-  error.value = ''
   try {
-    await auth.login(form.value.username, form.value.password, appId.value, faceImage.value)
+    await auth.login(form.value.username, form.value.password, appId.value)
     const redirect = route.query.redirect || '/dashboard'
     router.push(redirect)
   } catch (e) {
-    error.value = e.message || 'Face login failed.'
-    step.value = 1 // Go back to try again
+    error.value = e.message || 'Login failed.'
   } finally {
     loading.value = false
   }

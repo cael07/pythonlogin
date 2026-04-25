@@ -27,10 +27,19 @@
           <span class="user-name">{{ user?.full_name }}</span>
           <span class="user-email">{{ user?.email }}</span>
           <span class="user-username">@{{ user?.username }}</span>
-        </div>
-        <div v-if="user?.face_image_path" class="user-face-badge">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 11.5c0 .828-.448 1.5-1 1.5s-1-.672-1-1.5.448-1.5 1-1.5 1 .672 1 1.5zm5 0c0 .828-.448 1.5-1 1.5s-1-.672-1-1.5.448-1.5 1-1.5 1 .672 1 1.5zM12 18c-2.28 0-4.22-.97-5.49-2.5h10.98C16.22 17.03 14.28 18 12 18zM22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10z"/></svg>
-          Face ID Verified
+          
+          <button 
+            v-if="biometricAvailable && !fingerprintEnabled" 
+            class="btn btn-outline btn-sm fingerprint-setup-btn"
+            @click="setupFingerprint"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.44-5.57 1.31-.28.14-.62.03-.76-.25-.14-.28-.03-.62.25-.76 1.88-.96 3.94-1.45 6.08-1.45 2.15 0 4.02.48 5.7 1.4.28.15.38.49.23.77-.09.16-.24.25-.43.25zm3.22 5.46c-.07 0-.14-.02-.22-.05-1.94-.77-4.12-1.16-6.48-1.16-2.49 0-4.74.41-6.69 1.21-.28.12-.6.01-.71-.26-.12-.28-.01-.6.26-.71 2.11-.86 4.54-1.3 7.14-1.3 2.52 0 4.86.41 6.95 1.24.27.11.41.42.3.69-.09.21-.3.34-.55.34zm-14.8 5.16c-.06 0-.12-.01-.19-.04-1.27-.47-2.11-1.17-2.58-2.18-.36-.78-.44-1.87-.24-3.23.04-.31.33-.53.64-.49.31.04.53.33.49.64-.17 1.15-.12 2.02.16 2.62.33.72.96 1.23 1.91 1.58.29.11.43.43.32.72-.09.24-.31.38-.51.38zm11.75 3.32c-.11 0-.22-.03-.32-.09-2.01-1.21-4.7-1.82-7.98-1.82-1.74 0-3.51.17-5.26.51-.31.06-.6-.15-.66-.46-.06-.31.15-.6.46-.66 1.86-.36 3.73-.54 5.46-.54 3.49 0 6.36.65 8.52 1.95.27.16.35.5.19.77-.1.17-.28.34-.41.34zm-4.32 2.1c-.08 0-.17-.02-.24-.07-2.61-1.63-3.66-2.55-5.26-2.55-1.12 0-2.22.25-3.37.75-.28.12-.61-.01-.73-.29-.12-.28.01-.61.29-.73 1.3-.57 2.58-.87 3.81-.87 1.98 0 3.33.99 6.22 2.8.26.16.34.5.18.76-.11.17-.28.2-.4.2zM12 21c-.28 0-.5-.22-.5-.5s.22-.5.5-.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2c0 .28-.22.5-.5.5s-.5-.22-.5-.5c0-1.65 1.35-3 3-3s3 1.35 3 3-1.35 3-3 3z"/></svg>
+            Allow Fingerprint Login
+          </button>
+          <div v-else-if="fingerprintEnabled" class="fingerprint-status">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            Fingerprint Linked
+          </div>
         </div>
       </div>
 
@@ -60,7 +69,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
@@ -68,10 +77,59 @@ const auth  = useAuthStore()
 const router = useRouter()
 const user   = computed(() => auth.user)
 
+const biometricAvailable = ref(false)
+const fingerprintEnabled = ref(localStorage.getItem(`fp_${user.value?.username}`) === 'true')
+
+onMounted(async () => {
+  try {
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost'
+    biometricAvailable.value = !!(window.PublicKeyCredential && isSecure)
+  } catch (e) {}
+})
+
 const initials = computed(() => {
   if (!user.value?.full_name) return '?'
   return user.value.full_name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 })
+
+async function setupFingerprint() {
+  try {
+    // In a real app, the server would provide a creation challenge
+    const challenge = new Uint8Array(32)
+    window.crypto.getRandomValues(challenge)
+    const userId = new Uint8Array(16)
+    window.crypto.getRandomValues(userId)
+
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { name: "PythonLogin Auth" },
+        user: {
+          id: userId,
+          name: user.value.username,
+          displayName: user.value.full_name
+        },
+        pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+        timeout: 60000,
+        attestation: "direct",
+        userVerification: "required",
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "required"
+        }
+      }
+    })
+
+    if (credential) {
+      fingerprintEnabled.value = true
+      localStorage.setItem(`fp_${user.value.username}`, 'true')
+      alert("Fingerprint login has been enabled for this device!")
+    }
+  } catch (e) {
+    console.error("Fingerprint setup failed:", e)
+    alert("Could not set up fingerprint login. Please make sure your device supports it and try again.")
+  }
+}
 
 function handleLogout() {
   auth.logout()
@@ -171,6 +229,37 @@ function handleLogout() {
   border-radius: 99px;
 }
 .user-face-badge svg { width: 14px; height: 14px; }
+
+.fingerprint-setup-btn {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  border-color: var(--primary-light);
+  color: var(--primary-light);
+  width: fit-content;
+}
+
+.fingerprint-status {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--success);
+  font-weight: 500;
+}
+
+.btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.btn-outline:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary-light);
+}
 
 .token-section { padding: 1.5rem; }
 .token-title {
