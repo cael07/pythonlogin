@@ -38,26 +38,34 @@
         
         <!-- Pose HUD -->
         <div class="fc-pose-hud">
-          <div
-            v-for="(label, idx) in ['Left', 'Right', 'Front']"
-            :key="idx"
-            :class="['fc-pose-step', { active: scanStage > idx, pulse: scanStage === idx && faceAligned }]"
-          >
-            <span>{{ label }}</span>
-          </div>
+          <Transition name="fade-scale" mode="out-in">
+            <div
+              :key="scanStage"
+              class="fc-pose-step pulse"
+            >
+              <span>{{ ['Left', 'Right', 'Front', 'Blink Twice'][scanStage] || 'Done' }}</span>
+            </div>
+          </Transition>
         </div>
       </div>
 
       <!-- Instruction bar -->
       <div class="fc-instruction-bar">
         <div class="fc-instruction-icon">
-          <span v-if="!faceAligned">👁</span>
-          <span v-else-if="scanStage === 0">⬅️</span>
-          <span v-else-if="scanStage === 1">➡️</span>
-          <span v-else-if="scanStage === 2">🎯</span>
-          <span v-else>📸</span>
+          <Transition name="fade" mode="out-in">
+            <span :key="scanStage">
+              <span v-if="!faceAligned">👁</span>
+              <span v-else-if="scanStage === 0">⬅️</span>
+              <span v-else-if="scanStage === 1">➡️</span>
+              <span v-else-if="scanStage === 2">🎯</span>
+              <span v-else-if="scanStage === 3">😉</span>
+              <span v-else>📸</span>
+            </span>
+          </Transition>
         </div>
-        <p class="fc-instruction-text">{{ hint }}</p>
+        <Transition name="slide-fade" mode="out-in">
+          <p :key="hint" class="fc-instruction-text">{{ hint }}</p>
+        </Transition>
       </div>
     </div>
 
@@ -85,7 +93,7 @@ const emit = defineEmits(['captured'])
 /* ── State ──────────────────────────────────────────────── */
 const uiState    = ref('loading')   // loading | scanning | captured | error
 const hint       = ref('Loading face detection models…')
-const scanStage  = ref(0)           // 0: Left, 1: Right, 2: Front
+const scanStage  = ref(0)           // 0: Left, 1: Right, 2: Front, 3: Blink
 const faceAligned = ref(false)
 const capturedImg = ref(null)
 
@@ -99,22 +107,29 @@ let modelsReady     = false
 let captureInProgress = false
 let captureTimer    = null
 
+let blinkCount      = 0
+let wasEyeClosed    = false
+
 /* ── Geometry helpers ───────────────────────────────────── */
+function euclidean(a, b) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
+}
+
+function calcEAR(eye) {
+  // eye = 6 {x,y} points
+  const A = euclidean(eye[1], eye[5])
+  const B = euclidean(eye[2], eye[4])
+  const C = euclidean(eye[0], eye[3])
+  return C < 0.001 ? 1 : (A + B) / (2 * C)
+}
+
 function isFaceInOval(box, w, h) {
-  // Check if face is roughly centered and appropriately sized
-  // w, h are video dimensions
-  const cx = w / 2
-  const cy = h / 2
+  const cx = w / 2, cy = h / 2
   const fcx = box.x + box.width  / 2
   const fcy = box.y + box.height / 2
-  
   const dist = Math.sqrt((fcx - cx)**2 + (fcy - cy)**2)
-  
-  // Face should be centered within 25% of video width
   const isCentered = dist < (w * 0.25)
-  // Face width should be between 30% and 70% of video width
   const isCorrectSize = box.width > (w * 0.3) && box.width < (w * 0.7)
-  
   return isCentered && isCorrectSize
 }
 
@@ -142,24 +157,18 @@ async function detectionLoop() {
       const left  = landmarks.getLeftEye()[0]
       const right = landmarks.getRightEye()[3]
 
-      // Landmarks are in raw video coordinates.
-      // If we turn LEFT (user perspective), in a non-mirrored raw stream, nose moves RIGHT.
-      // ratio = dist(nose, left) / dist(nose, right)
-      // Note: face-api.js left eye is user's left.
       const distL = Math.abs(nose.x - left.x)
       const distR = Math.abs(nose.x - right.x)
       const ratio = distL / (distR || 1)
 
       if (scanStage.value === 0) {
         hint.value = 'Turn your head slightly LEFT'
-        // User turns left -> nose moves towards Right eye (raw image) -> distR decreases -> ratio increases
         if (ratio > 1.6) {
           scanStage.value = 1
           hint.value = 'Great! Now turn RIGHT'
         }
       } else if (scanStage.value === 1) {
         hint.value = 'Turn your head slightly RIGHT'
-        // User turns right -> nose moves towards Left eye (raw image) -> distL decreases -> ratio decreases
         if (ratio < 0.6) {
           scanStage.value = 2
           hint.value = 'Perfect! Now look FRONT'
@@ -168,9 +177,29 @@ async function detectionLoop() {
         hint.value = 'Look straight at the camera'
         if (ratio > 0.8 && ratio < 1.2) {
           scanStage.value = 3
-          hint.value = '📸 Hold still…'
-          triggerCapture()
-          return
+          hint.value = 'Now BLINK twice'
+        }
+      } else if (scanStage.value === 3) {
+        const leftEye  = landmarks.getLeftEye()
+        const rightEye = landmarks.getRightEye()
+        const earL = calcEAR(leftEye)
+        const earR = calcEAR(rightEye)
+        const ear  = (earL + earR) / 2
+
+        const isClosed = ear < 0.22
+        if (isClosed && !wasEyeClosed) {
+          wasEyeClosed = true
+        } else if (!isClosed && wasEyeClosed) {
+          wasEyeClosed = false
+          blinkCount++
+          hint.value = blinkCount === 1 ? 'One more blink!' : 'Blink detected!'
+          
+          if (blinkCount >= 2) {
+            scanStage.value = 4
+            hint.value = '📸 Hold still…'
+            triggerCapture()
+            return
+          }
         }
       }
     } else {
@@ -195,9 +224,6 @@ function triggerCapture() {
     c.width  = video.videoWidth
     c.height = video.videoHeight
     const ctx = c.getContext('2d')
-    
-    // Capture mirrored to match user's view if they expect it, 
-    // but usually backend expects normal face. We'll capture normal.
     ctx.drawImage(video, 0, 0)
     capturedImg.value = c.toDataURL('image/jpeg', 0.92)
 
@@ -219,11 +245,7 @@ function stopCamera() {
 async function startCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { 
-        width: { ideal: 640 }, 
-        height: { ideal: 640 }, 
-        facingMode: 'user' 
-      },
+      video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: 'user' },
     })
     const video = videoEl.value
     if (!video) return
@@ -235,7 +257,7 @@ async function startCamera() {
     uiState.value = 'scanning'
     rafId = requestAnimationFrame(detectionLoop)
   } catch (err) {
-    hint.value = 'Camera access denied — please allow camera permissions.'
+    hint.value = 'Camera access denied.'
     uiState.value = 'error'
   }
 }
@@ -261,6 +283,8 @@ async function init() {
 function retake() {
   capturedImg.value  = null
   scanStage.value    = 0
+  blinkCount         = 0
+  wasEyeClosed       = false
   captureInProgress  = false
   if (captureTimer) clearTimeout(captureTimer)
   startCamera()
@@ -484,4 +508,17 @@ onUnmounted(() => {
 }
 
 .fc-retake-btn { padding: 0.6rem 1.5rem; font-size: 0.9rem; }
+
+/* ── Transitions ── */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.fade-scale-enter-active, .fade-scale-leave-active { transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.fade-scale-enter-from { opacity: 0; transform: scale(0.8) translateY(10px); }
+.fade-scale-leave-to { opacity: 0; transform: scale(1.1) translateY(-10px); }
+
+.slide-fade-enter-active { transition: all 0.4s ease-out; }
+.slide-fade-leave-active { transition: all 0.3s cubic-bezier(1, 0.5, 0.8, 1); }
+.slide-fade-enter-from { transform: translateX(20px); opacity: 0; }
+.slide-fade-leave-to { transform: translateX(-20px); opacity: 0; }
 </style>
