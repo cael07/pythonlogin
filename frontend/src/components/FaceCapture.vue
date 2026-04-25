@@ -38,17 +38,15 @@
         
         <!-- Pose HUD -->
         <div class="fc-pose-hud">
-          <div
-            v-for="(label, idx) in ['Left', 'Right', 'Front']"
-            :key="idx"
-            :class="['fc-pose-step', { 
-              active: scanStage > idx, 
-              pulse: scanStage === idx && faceAligned, 
-              success: isScanSuccess 
-            }]"
-          >
-            <span>{{ label }}</span>
-          </div>
+          <Transition name="fade-scale" mode="out-in">
+            <div
+              :key="scanStage"
+              class="fc-pose-step pulse"
+              :class="{ success: isScanSuccess }"
+            >
+              <span>{{ ['Face Left', 'Face Right', 'Face Front'][scanStage] || 'Success!' }}</span>
+            </div>
+          </Transition>
         </div>
       </div>
 
@@ -117,8 +115,9 @@ function isFaceInOval(box, w, h) {
   const fcx = box.x + box.width  / 2
   const fcy = box.y + box.height / 2
   const dist = Math.sqrt((fcx - cx)**2 + (fcy - cy)**2)
-  const isCentered = dist < (w * 0.25)
-  const isCorrectSize = box.width > (w * 0.3) && box.width < (w * 0.7)
+  // Slightly more relaxed centering for mobile (30% instead of 25%)
+  const isCentered = dist < (w * 0.3)
+  const isCorrectSize = box.width > (w * 0.25) && box.width < (w * 0.75)
   return isCentered && isCorrectSize
 }
 
@@ -152,22 +151,24 @@ async function detectionLoop() {
 
       if (scanStage.value === 0) {
         hint.value = 'Face LEFT'
-        if (ratio > 1.6) {
+        // Lower threshold (1.4 instead of 1.6)
+        if (ratio > 1.4) {
           scanStage.value = 1
           hint.value = 'Face RIGHT'
         }
       } else if (scanStage.value === 1) {
         hint.value = 'Face RIGHT'
-        if (ratio < 0.6) {
+        // Higher threshold (0.7 instead of 0.6)
+        if (ratio < 0.7) {
           scanStage.value = 2
           hint.value = 'Face FRONT'
         }
       } else if (scanStage.value === 2) {
         hint.value = 'Face FRONT'
-        if (ratio > 0.8 && ratio < 1.2) {
+        if (ratio > 0.8 && ratio < 1.25) {
           scanStage.value = 3
           isScanSuccess.value = true
-          hint.value = 'Perfect! Hold still...'
+          hint.value = '📸 Perfect! Hold still...'
           triggerCapture()
           return
         }
