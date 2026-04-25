@@ -19,7 +19,22 @@
     <!-- ── Camera active ──────────────────────────── -->
     <div v-show="uiState === 'scanning'" class="fc-camera-section">
       <div class="fc-video-wrap" :class="{ 'face-aligned': faceAligned }">
-        <video ref="videoEl" class="fc-video" autoplay muted playsinline></video>
+        <div class="fc-video-container">
+          <video ref="videoEl" class="fc-video" autoplay muted playsinline></video>
+          
+          <!-- SVG Overlay Outline -->
+          <svg class="fc-overlay" viewBox="0 0 100 100">
+            <circle 
+              cx="50" cy="50" r="46" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="1.5" 
+              stroke-dasharray="289"
+              :stroke-dashoffset="faceAligned ? 0 : 289"
+              class="fc-outline-path"
+            />
+          </svg>
+        </div>
         
         <!-- Pose HUD -->
         <div class="fc-pose-hud">
@@ -76,7 +91,6 @@ const capturedImg = ref(null)
 
 /* ── Template refs ──────────────────────────────────────── */
 const videoEl   = ref(null)
-const overlayEl = ref(null)
 
 /* ── Internals ──────────────────────────────────────────── */
 let stream          = null
@@ -85,67 +99,42 @@ let modelsReady     = false
 let captureInProgress = false
 let captureTimer    = null
 
-let wasEyeClosed = false
-
 /* ── Geometry helpers ───────────────────────────────────── */
-function euclidean(a, b) {
-  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
-}
-
-function calcEAR(eye) {
-  // eye = 6 {x,y} points (indices 0-5 mapped from landmark slice)
-  const A = euclidean(eye[1], eye[5])
-  const B = euclidean(eye[2], eye[4])
-  const C = euclidean(eye[0], eye[3])
-  return C < 0.001 ? 1 : (A + B) / (2 * C)
-}
-
-/* ── Oval geometry ──────────────────────────────────────── */
-function getOval(w, h) {
-  const minDim = Math.min(w, h)
-  // Perfect circle guide for circular UI
-  return {
-    cx: w / 2,
-    cy: h / 2,
-    rx: minDim * 0.42,
-    ry: minDim * 0.42
-  }
-}
-
 function isFaceInOval(box, w, h) {
-  // Simple check if face is roughly centered and fits
-  const cx = w / 2, cy = h / 2
+  // Check if face is roughly centered and appropriately sized
+  // w, h are video dimensions
+  const cx = w / 2
+  const cy = h / 2
   const fcx = box.x + box.width  / 2
   const fcy = box.y + box.height / 2
+  
   const dist = Math.sqrt((fcx - cx)**2 + (fcy - cy)**2)
-  return dist < (w * 0.22) && box.width > (w * 0.35)
-}
-
-/* ── Canvas drawing ─────────────────────────────────────── */
-function drawOverlay() {
-  // We no longer draw on canvas, we use CSS for the circle
+  
+  // Face should be centered within 25% of video width
+  const isCentered = dist < (w * 0.25)
+  // Face width should be between 30% and 70% of video width
+  const isCorrectSize = box.width > (w * 0.3) && box.width < (w * 0.7)
+  
+  return isCentered && isCorrectSize
 }
 
 /* ── Detection loop ─────────────────────────────────────── */
 async function detectionLoop() {
-  const video  = videoEl.value
-  const canvas = overlayEl.value
-
-  if (!video || !canvas || !modelsReady || captureInProgress) return
+  const video = videoEl.value
+  if (!video || !modelsReady || captureInProgress) return
 
   const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
 
   try {
     const detection = await faceapi
       .detectSingleFace(video, opts)
-      .withFaceLandmarks(true) // true = use tiny landmark model
+      .withFaceLandmarks(true)
 
     const aligned = detection
-      ? isFaceInOval(detection.detection.box, canvas.width, canvas.height)
+      ? isFaceInOval(detection.detection.box, video.videoWidth, video.videoHeight)
       : false
 
     faceAligned.value = aligned
-    drawOverlay(aligned, blinkCount.value)
 
     if (aligned && detection) {
       const landmarks = detection.landmarks
@@ -153,19 +142,25 @@ async function detectionLoop() {
       const left  = landmarks.getLeftEye()[0]
       const right = landmarks.getRightEye()[3]
 
+      // Landmarks are in raw video coordinates.
+      // If we turn LEFT (user perspective), in a non-mirrored raw stream, nose moves RIGHT.
+      // ratio = dist(nose, left) / dist(nose, right)
+      // Note: face-api.js left eye is user's left.
       const distL = Math.abs(nose.x - left.x)
       const distR = Math.abs(nose.x - right.x)
       const ratio = distL / (distR || 1)
 
       if (scanStage.value === 0) {
         hint.value = 'Turn your head slightly LEFT'
-        if (ratio < 0.65) {
+        // User turns left -> nose moves towards Right eye (raw image) -> distR decreases -> ratio increases
+        if (ratio > 1.6) {
           scanStage.value = 1
           hint.value = 'Great! Now turn RIGHT'
         }
       } else if (scanStage.value === 1) {
         hint.value = 'Turn your head slightly RIGHT'
-        if (ratio > 1.55) {
+        // User turns right -> nose moves towards Left eye (raw image) -> distL decreases -> ratio decreases
+        if (ratio < 0.6) {
           scanStage.value = 2
           hint.value = 'Perfect! Now look FRONT'
         }
@@ -181,7 +176,7 @@ async function detectionLoop() {
     } else {
       hint.value = 'Position your face in the circle'
     }
-  } catch (_) { /* skip frame on transient errors */ }
+  } catch (_) { /* skip frame */ }
 
   rafId = requestAnimationFrame(detectionLoop)
 }
@@ -199,13 +194,17 @@ function triggerCapture() {
     const c = document.createElement('canvas')
     c.width  = video.videoWidth
     c.height = video.videoHeight
-    c.getContext('2d').drawImage(video, 0, 0)
+    const ctx = c.getContext('2d')
+    
+    // Capture mirrored to match user's view if they expect it, 
+    // but usually backend expects normal face. We'll capture normal.
+    ctx.drawImage(video, 0, 0)
     capturedImg.value = c.toDataURL('image/jpeg', 0.92)
 
     stopCamera()
     uiState.value = 'captured'
     emit('captured', capturedImg.value)
-  }, 350)
+  }, 500)
 }
 
 /* ── Camera control ─────────────────────────────────────── */
@@ -220,32 +219,31 @@ function stopCamera() {
 async function startCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 480 }, height: { ideal: 640 }, facingMode: 'user' },
+      video: { 
+        width: { ideal: 640 }, 
+        height: { ideal: 640 }, 
+        facingMode: 'user' 
+      },
     })
     const video = videoEl.value
+    if (!video) return
     video.srcObject = stream
     await new Promise(res => { video.onloadedmetadata = res })
     await video.play()
 
-    // Sync canvas to actual video size
-    const canvas = overlayEl.value
-    canvas.width  = video.videoWidth  || 640
-    canvas.height = video.videoHeight || 480
-
-    drawOverlay(false, 0)
-    hint.value = 'Align your face inside the oval'
+    hint.value = 'Align your face inside the circle'
     uiState.value = 'scanning'
     rafId = requestAnimationFrame(detectionLoop)
   } catch (err) {
-    hint.value = 'Camera access denied — please allow camera permissions and try again.'
+    hint.value = 'Camera access denied — please allow camera permissions.'
     uiState.value = 'error'
   }
 }
 
-/* ── Load models then start camera ─────────────────────── */
+/* ── Load models ────────────────────────────────────────── */
 async function init() {
   uiState.value = 'loading'
-  hint.value    = 'Loading face detection models…'
+  hint.value    = 'Initializing...'
   try {
     const MODEL_URL = '/models'
     await Promise.all([
@@ -255,17 +253,30 @@ async function init() {
     modelsReady = true
     await startCamera()
   } catch (err) {
-    hint.value  = 'Failed to load face models. Make sure /public/models/ is populated.'
+    hint.value  = 'Failed to load face models.'
     uiState.value = 'error'
   }
 }
 
+function retake() {
+  capturedImg.value  = null
+  scanStage.value    = 0
+  captureInProgress  = false
+  if (captureTimer) clearTimeout(captureTimer)
+  startCamera()
+}
+
+onMounted(init)
+onUnmounted(() => {
+  stopCamera()
+  if (captureTimer) clearTimeout(captureTimer)
+})
+</script>
+
 /* ── Retake ─────────────────────────────────────────────── */
 function retake() {
   capturedImg.value  = null
-  blinkCount.value   = 0
-  conseqClosed       = 0
-  wasEyeClosed       = false
+  scanStage.value    = 0
   captureInProgress  = false
   if (captureTimer) clearTimeout(captureTimer)
   startCamera()
@@ -328,15 +339,51 @@ onUnmounted(() => {
   height: 280px;
   aspect-ratio: 1/1;
   background: #000;
-  border: 6px solid rgba(255,255,255,0.1);
   box-shadow: var(--shadow-card);
   margin: 1rem 0;
-  transition: all 0.4s ease;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 4px solid rgba(255,255,255,0.05);
 }
 
 .fc-video-wrap.face-aligned {
-  border-color: #6366f1; /* Turns blue when aligned */
-  box-shadow: 0 0 30px rgba(99,102,241,0.4);
+  border-color: rgba(99,102,241,0.2);
+  box-shadow: 0 0 40px rgba(99,102,241,0.3);
+}
+
+.fc-video-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fc-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* Mirror for user */
+}
+
+.fc-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  color: rgba(255,255,255,0.3);
+  transition: color 0.4s;
+}
+
+.fc-video-wrap.face-aligned .fc-overlay {
+  color: #6366f1; /* Primary blue when aligned */
+}
+
+.fc-outline-path {
+  transition: stroke-dashoffset 0.6s ease, stroke 0.4s;
 }
 
 @media (max-width: 480px) {
@@ -346,7 +393,7 @@ onUnmounted(() => {
 /* ── Pose HUD ── */
 .fc-pose-hud {
   position: absolute;
-  bottom: 20px;
+  bottom: 25px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -355,21 +402,22 @@ onUnmounted(() => {
 }
 
 .fc-pose-step {
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 20px;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.7);
   border: 1px solid rgba(255,255,255,0.2);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: rgba(255,255,255,0.4);
-  transition: all .3s;
-  backdrop-filter: blur(4px);
+  transition: all .4s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
 }
 
 .fc-pose-step.active {
   background: #10b981;
   border-color: #10b981;
   color: #fff;
+  transform: scale(1.05);
 }
 
 .fc-pose-step.pulse {
@@ -380,8 +428,8 @@ onUnmounted(() => {
 }
 
 @keyframes posePulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%, 100% { opacity: 1; transform: scale(1.05); }
+  50% { opacity: 0.7; transform: scale(1); }
 }
 
 /* ── Instruction bar ── */
@@ -392,14 +440,16 @@ onUnmounted(() => {
   background: rgba(255,255,255,0.04);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 0.85rem 1.25rem;
+  padding: 1rem 1.25rem;
   width: 100%;
+  max-width: 360px;
+  transition: all 0.3s;
 }
 
-.fc-instruction-icon { font-size: 1.4rem; line-height: 1; flex-shrink: 0; }
+.fc-instruction-icon { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
 
 .fc-instruction-text {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: var(--text-1);
   font-weight: 500;
 }
@@ -409,43 +459,45 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  gap: 1.25rem;
   padding: 1rem 0;
 }
 
 .fc-captured-frame {
   position: relative;
-  width: 160px; height: 160px;
+  width: 180px; height: 180px;
   border-radius: 50%;
   overflow: hidden;
-  border: 3px solid var(--success);
-  box-shadow: 0 0 32px var(--success-glow), 0 8px 24px rgba(0,0,0,0.4);
+  border: 4px solid var(--success);
+  box-shadow: 0 0 40px var(--success-glow), 0 12px 32px rgba(0,0,0,0.4);
 }
 
 .fc-captured-img {
   width: 100%; height: 100%;
   object-fit: cover;
+  /* Image was captured normal, but usually displayed mirrored for consistency with camera view 
+     UNLESS the user expects it to be like a real photo. Let's keep it mirrored for UI consistency. */
   transform: scaleX(-1);
 }
 
 .fc-captured-badge {
   position: absolute;
-  bottom: 6px; right: 6px;
-  width: 32px; height: 32px;
+  bottom: 8px; right: 8px;
+  width: 36px; height: 36px;
   background: var(--success);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
-.fc-captured-badge svg { width: 18px; height: 18px; fill: #fff; }
+.fc-captured-badge svg { width: 20px; height: 20px; fill: #fff; }
 
 .fc-captured-label {
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: var(--success);
 }
 
-.fc-retake-btn { padding: 0.5rem 1.25rem; font-size: 0.85rem; }
+.fc-retake-btn { padding: 0.6rem 1.5rem; font-size: 0.9rem; }
 </style>
