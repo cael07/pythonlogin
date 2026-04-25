@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
 
-from auth.models import User
-from auth.schemas import UserRegister, UserLogin
-from auth.utils import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
+from .models import User
+from .schemas import UserRegister, UserLogin
+from .utils import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 
 FACE_IMAGES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "face_images")
 os.makedirs(FACE_IMAGES_DIR, exist_ok=True)

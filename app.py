@@ -6,9 +6,9 @@ import os
 backend_path = os.path.join(os.path.dirname(__file__), "backend")
 sys.path.insert(0, backend_path)
 
-# Import the FastAPI app from backend/main.py
+# Import the FastAPI app from backend/main.py as a package
 try:
-    from main import app
+    from backend.main import app
 except ImportError as e:
     print(f"Error: Could not find 'main.py' in {backend_path}")
     raise e

@@ -4,8 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
 
-from database import init_db
-from auth.router import router as auth_router
+from .database import init_db
+from .auth.router import router as auth_router
 
 
 @asynccontextmanager
