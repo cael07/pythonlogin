@@ -18,7 +18,7 @@
 
     <!-- ── Camera active ──────────────────────────── -->
     <div v-show="uiState === 'scanning'" class="fc-camera-section">
-      <div class="fc-video-wrap" :class="{ 'face-aligned': faceAligned }">
+      <div class="fc-video-wrap" :class="{ 'face-aligned': faceAligned, 'scan-success': isScanSuccess }">
         <div class="fc-video-container">
           <video ref="videoEl" class="fc-video" autoplay muted playsinline></video>
           
@@ -38,27 +38,30 @@
         
         <!-- Pose HUD -->
         <div class="fc-pose-hud">
-          <Transition name="fade-scale" mode="out-in">
-            <div
-              :key="scanStage"
-              class="fc-pose-step pulse"
-            >
-              <span>{{ ['Left', 'Right', 'Front', 'Blink Twice'][scanStage] || 'Done' }}</span>
-            </div>
-          </Transition>
+          <div
+            v-for="(label, idx) in ['Left', 'Right', 'Front']"
+            :key="idx"
+            :class="['fc-pose-step', { 
+              active: scanStage > idx, 
+              pulse: scanStage === idx && faceAligned, 
+              success: isScanSuccess 
+            }]"
+          >
+            <span>{{ label }}</span>
+          </div>
         </div>
       </div>
 
       <!-- Instruction bar -->
-      <div class="fc-instruction-bar">
+      <div class="fc-instruction-bar" :class="{ 'success': isScanSuccess }">
         <div class="fc-instruction-icon">
           <Transition name="fade" mode="out-in">
             <span :key="scanStage">
-              <span v-if="!faceAligned">👁</span>
+              <span v-if="isScanSuccess">✅</span>
+              <span v-else-if="!faceAligned">👁</span>
               <span v-else-if="scanStage === 0">⬅️</span>
               <span v-else-if="scanStage === 1">➡️</span>
               <span v-else-if="scanStage === 2">🎯</span>
-              <span v-else-if="scanStage === 3">😉</span>
               <span v-else>📸</span>
             </span>
           </Transition>
@@ -93,8 +96,9 @@ const emit = defineEmits(['captured'])
 /* ── State ──────────────────────────────────────────────── */
 const uiState    = ref('loading')   // loading | scanning | captured | error
 const hint       = ref('Loading face detection models…')
-const scanStage  = ref(0)           // 0: Left, 1: Right, 2: Front, 3: Blink
+const scanStage  = ref(0)           // 0: Left, 1: Right, 2: Front
 const faceAligned = ref(false)
+const isScanSuccess = ref(false)
 const capturedImg = ref(null)
 
 /* ── Template refs ──────────────────────────────────────── */
@@ -107,22 +111,7 @@ let modelsReady     = false
 let captureInProgress = false
 let captureTimer    = null
 
-let blinkCount      = 0
-let wasEyeClosed    = false
-
 /* ── Geometry helpers ───────────────────────────────────── */
-function euclidean(a, b) {
-  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
-}
-
-function calcEAR(eye) {
-  // eye = 6 {x,y} points
-  const A = euclidean(eye[1], eye[5])
-  const B = euclidean(eye[2], eye[4])
-  const C = euclidean(eye[0], eye[3])
-  return C < 0.001 ? 1 : (A + B) / (2 * C)
-}
-
 function isFaceInOval(box, w, h) {
   const cx = w / 2, cy = h / 2
   const fcx = box.x + box.width  / 2
@@ -162,44 +151,25 @@ async function detectionLoop() {
       const ratio = distL / (distR || 1)
 
       if (scanStage.value === 0) {
-        hint.value = 'Turn your head slightly LEFT'
+        hint.value = 'Face LEFT'
         if (ratio > 1.6) {
           scanStage.value = 1
-          hint.value = 'Great! Now turn RIGHT'
+          hint.value = 'Face RIGHT'
         }
       } else if (scanStage.value === 1) {
-        hint.value = 'Turn your head slightly RIGHT'
+        hint.value = 'Face RIGHT'
         if (ratio < 0.6) {
           scanStage.value = 2
-          hint.value = 'Perfect! Now look FRONT'
+          hint.value = 'Face FRONT'
         }
       } else if (scanStage.value === 2) {
-        hint.value = 'Look straight at the camera'
+        hint.value = 'Face FRONT'
         if (ratio > 0.8 && ratio < 1.2) {
           scanStage.value = 3
-          hint.value = 'Now BLINK twice'
-        }
-      } else if (scanStage.value === 3) {
-        const leftEye  = landmarks.getLeftEye()
-        const rightEye = landmarks.getRightEye()
-        const earL = calcEAR(leftEye)
-        const earR = calcEAR(rightEye)
-        const ear  = (earL + earR) / 2
-
-        const isClosed = ear < 0.22
-        if (isClosed && !wasEyeClosed) {
-          wasEyeClosed = true
-        } else if (!isClosed && wasEyeClosed) {
-          wasEyeClosed = false
-          blinkCount++
-          hint.value = blinkCount === 1 ? 'One more blink!' : 'Blink detected!'
-          
-          if (blinkCount >= 2) {
-            scanStage.value = 4
-            hint.value = '📸 Hold still…'
-            triggerCapture()
-            return
-          }
+          isScanSuccess.value = true
+          hint.value = 'Perfect! Hold still...'
+          triggerCapture()
+          return
         }
       }
     } else {
@@ -230,7 +200,7 @@ function triggerCapture() {
     stopCamera()
     uiState.value = 'captured'
     emit('captured', capturedImg.value)
-  }, 500)
+  }, 800)
 }
 
 /* ── Camera control ─────────────────────────────────────── */
@@ -283,8 +253,7 @@ async function init() {
 function retake() {
   capturedImg.value  = null
   scanStage.value    = 0
-  blinkCount         = 0
-  wasEyeClosed       = false
+  isScanSuccess.value = false
   captureInProgress  = false
   if (captureTimer) clearTimeout(captureTimer)
   startCamera()
@@ -358,6 +327,11 @@ onUnmounted(() => {
   box-shadow: 0 0 40px rgba(99,102,241,0.3);
 }
 
+.fc-video-wrap.scan-success {
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.4);
+}
+
 .fc-video-container {
   position: relative;
   width: 100%;
@@ -388,6 +362,10 @@ onUnmounted(() => {
 
 .fc-video-wrap.face-aligned .fc-overlay {
   color: #6366f1; /* Primary blue when aligned */
+}
+
+.fc-video-wrap.scan-success .fc-overlay {
+  color: #10b981; /* Success green when done */
 }
 
 .fc-outline-path {
@@ -422,16 +400,19 @@ onUnmounted(() => {
 }
 
 .fc-pose-step.active {
-  background: #10b981;
-  border-color: #10b981;
+  background: #6366f1;
+  border-color: #6366f1;
   color: #fff;
   transform: scale(1.05);
 }
 
-.fc-pose-step.pulse {
-  background: #6366f1;
-  border-color: #6366f1;
+.fc-pose-step.success {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
   color: #fff;
+}
+
+.fc-pose-step.pulse {
   animation: posePulse 1.5s infinite;
 }
 
@@ -452,6 +433,11 @@ onUnmounted(() => {
   width: 100%;
   max-width: 360px;
   transition: all 0.3s;
+}
+
+.fc-instruction-bar.success {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
 }
 
 .fc-instruction-icon { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
@@ -483,8 +469,6 @@ onUnmounted(() => {
 .fc-captured-img {
   width: 100%; height: 100%;
   object-fit: cover;
-  /* Image was captured normal, but usually displayed mirrored for consistency with camera view 
-     UNLESS the user expects it to be like a real photo. Let's keep it mirrored for UI consistency. */
   transform: scaleX(-1);
 }
 
