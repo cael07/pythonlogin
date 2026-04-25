@@ -381,8 +381,8 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   overflow: hidden;
   width: 100%;
-  max-width: 440px;
-  aspect-ratio: 3/4; /* Taller for mobile */
+  max-width: 100%; /* Fill the card */
+  aspect-ratio: 4/5; /* Taller and larger */
   background: #000;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
 }
@@ -460,7 +460,6 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   padding: 0.85rem 1.25rem;
   width: 100%;
-  max-width: 520px;
 }
 
 .fc-instruction-icon { font-size: 1.4rem; line-height: 1; flex-shrink: 0; }
