@@ -20,5 +20,5 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     async with engine.begin() as conn:
-        from auth.models import User  # noqa: F401
+        from .auth.models import User  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
