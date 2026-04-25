@@ -273,22 +273,6 @@ onUnmounted(() => {
 })
 </script>
 
-/* ── Retake ─────────────────────────────────────────────── */
-function retake() {
-  capturedImg.value  = null
-  scanStage.value    = 0
-  captureInProgress  = false
-  if (captureTimer) clearTimeout(captureTimer)
-  startCamera()
-}
-
-onMounted(init)
-onUnmounted(() => {
-  stopCamera()
-  if (captureTimer) clearTimeout(captureTimer)
-})
-</script>
-
 <style scoped>
 .fc-root {
   display: flex;
