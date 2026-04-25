@@ -16,9 +16,13 @@
         Signing in to <strong>{{ appId }}</strong>
       </div>
 
-      <!-- Error -->
+      <!-- Error & Status -->
       <Transition name="fade">
-        <div v-if="error" class="alert alert-error" role="alert">
+        <div v-if="apiStatus === 'offline'" class="alert alert-error" role="alert">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          API Server is unreachable. Please check your connection.
+        </div>
+        <div v-else-if="error" class="alert alert-error" role="alert">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
           {{ error }}
         </div>
@@ -105,13 +109,22 @@ const showPwd   = ref(false)
 const touched   = ref({})
 
 const biometricSupported = ref(false)
-onMounted(() => {
+const apiStatus = ref('checking') // checking | online | offline
+
+onMounted(async () => {
+  // Check API health
+  try {
+    const res = await fetch(`${import.meta.env.VITE_API_URL || '/auth'}/health`)
+    if (res.ok) apiStatus.value = 'online'
+    else apiStatus.value = 'offline'
+  } catch (e) {
+    apiStatus.value = 'offline'
+  }
+
   try {
     const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost'
     biometricSupported.value = !!(window.PublicKeyCredential && isSecure)
-  } catch (e) {
-    // Biometric check unavailable
-  }
+  } catch (e) {}
 })
 
 function fieldError(f) { return touched.value[f] && !form.value[f] }
