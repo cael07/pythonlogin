@@ -84,6 +84,10 @@
         Don't have an account?
         <RouterLink to="/register">Create one</RouterLink>
       </div>
+
+      <div style="text-align: center; margin-top: 2rem; font-size: 0.65rem; color: var(--text-3); opacity: 0.5;">
+        v1.0.1 (SHA-Fix)
+      </div>
     </div>
   </div>
 </template>
