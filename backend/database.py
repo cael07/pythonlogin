@@ -11,14 +11,14 @@ if _url.startswith("postgres://"):
 elif _url.startswith("postgresql://"):
     _url = _url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Ensure SSL is requested for PostgreSQL
-if "postgresql" in _url and "sslmode" not in _url:
-    separator = "&" if "?" in _url else "?"
-    _url += f"{separator}sslmode=require"
-
 DATABASE_URL = _url
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+# SSL configuration for production (PostgreSQL)
+connect_args = {}
+if "postgresql" in DATABASE_URL:
+    connect_args["ssl"] = "require"
+
+engine = create_async_engine(DATABASE_URL, echo=False, connect_args=connect_args)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
