@@ -67,6 +67,22 @@ def refresh_token(
     new_access = create_access_token({"sub": str(user.id)})
     return {"access_token": new_access}
 
+@router.get("/image/{username}")
+def get_user_image(username: str, db: Session = Depends(get_db)):
+    user = service.get_user_by_username(db, username)
+    if not user or not user.face_image_path:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Path to the actual file
+    from .service import FACE_IMAGES_DIR
+    file_path = os.path.join(os.path.dirname(FACE_IMAGES_DIR), user.face_image_path)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    from fastapi.responses import FileResponse
+    return FileResponse(file_path, media_type="image/jpeg")
+
 @router.get("/health")
 def health():
     from ..database import check_db_health

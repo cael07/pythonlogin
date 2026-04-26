@@ -116,6 +116,12 @@ const biometricSupported = ref(false)
 const apiStatus = ref('checking') // checking | online | offline
 
 onMounted(async () => {
+  // Check for remembered username
+  const lastUser = localStorage.getItem('last_username')
+  if (lastUser) {
+    form.value.username = lastUser
+  }
+
   // Check API health
   const apiBase = import.meta.env.VITE_API_URL || 'https://pythonlogin-api.onrender.com/auth'
   try {
@@ -156,6 +162,12 @@ async function handleBiometricLogin() {
     const challenge = new Uint8Array(32)
     window.crypto.getRandomValues(challenge)
 
+    // For the demo: we require username to know which credential to look for
+    if (!form.value.username) {
+      error.value = "Please enter your username first to link your fingerprint."
+      return
+    }
+
     console.log("Triggering biometric prompt...")
     const credential = await navigator.credentials.get({
       publicKey: {
@@ -163,16 +175,18 @@ async function handleBiometricLogin() {
         rpId: window.location.hostname,
         userVerification: "required",
         timeout: 60000,
-        // No allowCredentials = browser looks for Passkeys on device
+        allowCredentials: [] // In a real app, we'd pass the IDs of registered keys
       }
     })
     
     if (credential) {
       console.log("Biometric success:", credential)
-      // For this demo, we'll log in as 'cael' if no username is known, 
-      // but a real app would use the credential.response.userHandle
       loading.value = true
-      await auth.login(form.value.username || "cael", 'biometric_bypass_mock', appId.value)
+      await auth.login(form.value.username, 'biometric_bypass_mock', appId.value)
+      
+      // Remember username for next time
+      localStorage.setItem('last_username', form.value.username)
+      
       router.push(route.query.redirect || '/dashboard')
     }
     

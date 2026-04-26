@@ -19,7 +19,7 @@
       <!-- User card -->
       <div class="user-card glass">
         <div v-if="user?.face_image_path" class="user-face-container">
-          <img :src="`https://pythonlogin-api.onrender.com/${user.face_image_path}`" alt="User face" class="user-face-img" />
+          <img :src="`https://pythonlogin-api.onrender.com/auth/image/${user.username}`" alt="User face" class="user-face-img" />
         </div>
         <div v-else class="user-avatar">{{ initials }}</div>
         
@@ -108,7 +108,7 @@ async function setupFingerprint() {
     const credential = await navigator.credentials.create({
       publicKey: {
         challenge,
-        rp: { name: "PythonLogin Auth", id: window.location.hostname },
+        rp: { name: "PythonLogin Auth" },
         user: {
           id: userId,
           name: user.value.username,
@@ -116,13 +116,11 @@ async function setupFingerprint() {
         },
         pubKeyCredParams: [{ alg: -7, type: "public-key" }],
         timeout: 60000,
-        attestation: "none",
+        attestation: "direct",
         userVerification: "required",
         authenticatorSelection: {
           authenticatorAttachment: "platform",
-          userVerification: "required",
-          residentKey: "required",
-          requireResidentKey: true
+          userVerification: "required"
         }
       }
     })
