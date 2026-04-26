@@ -108,7 +108,7 @@ async function setupFingerprint() {
     const credential = await navigator.credentials.create({
       publicKey: {
         challenge,
-        rp: { name: "PythonLogin Auth" },
+        rp: { name: "PythonLogin Auth", id: window.location.hostname },
         user: {
           id: userId,
           name: user.value.username,
@@ -116,11 +116,13 @@ async function setupFingerprint() {
         },
         pubKeyCredParams: [{ alg: -7, type: "public-key" }],
         timeout: 60000,
-        attestation: "direct",
+        attestation: "none",
         userVerification: "required",
         authenticatorSelection: {
           authenticatorAttachment: "platform",
-          userVerification: "required"
+          userVerification: "required",
+          residentKey: "required",
+          requireResidentKey: true
         }
       }
     })

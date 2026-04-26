@@ -156,33 +156,25 @@ async function handleBiometricLogin() {
     const challenge = new Uint8Array(32)
     window.crypto.getRandomValues(challenge)
 
-    // This triggers the Fingerprint/FaceID prompt on phone
-    await navigator.credentials.get({
+    console.log("Triggering biometric prompt...")
+    const credential = await navigator.credentials.get({
       publicKey: {
-        challenge,
+        challenge: new Uint8Array(32),
+        rpId: window.location.hostname,
+        userVerification: "required",
         timeout: 60000,
-        userVerification: 'required',
-        allowCredentials: [] // In real app, we'd pass IDs of registered keys
+        // No allowCredentials = browser looks for Passkeys on device
       }
-    }).catch(e => {
-      // If we have no credentials registered yet, it might fail.
-      // But we just want to show the prompt.
-      console.log('Biometric prompt triggered:', e)
     })
-
-    // For the demo: if they interact with the prompt, we'll ask for username 
-    // to "link" the biometric if it's the first time, OR just proceed if they have a saved session.
-    if (!form.value.username) {
-      error.value = "Please enter your username first to link your fingerprint."
-      return
+    
+    if (credential) {
+      console.log("Biometric success:", credential)
+      // For this demo, we'll log in as 'cael' if no username is known, 
+      // but a real app would use the credential.response.userHandle
+      loading.value = true
+      await auth.login(form.value.username || "cael", 'biometric_bypass_mock', appId.value)
+      router.push(route.query.redirect || '/dashboard')
     }
-
-    // Mock success: Auto-login since the user verified themselves to the OS
-    loading.value = true
-    // We reuse the login but maybe with a "biometric" flag or bypass
-    // For this prototype, we'll require password once then link, but here we'll just mock the bypass.
-    await auth.login(form.value.username, 'biometric_bypass_mock', appId.value)
-    router.push(route.query.redirect || '/dashboard')
     
   } catch (e) {
     error.value = "Biometric authentication failed or was cancelled."

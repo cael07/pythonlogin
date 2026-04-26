@@ -56,10 +56,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve stored face images statically
+# Serve stored face images statically with CORS support
 FACE_DIR = os.path.join(os.path.dirname(__file__), "face_images")
 os.makedirs(FACE_DIR, exist_ok=True)
-app.mount("/face_images", StaticFiles(directory=FACE_DIR), name="face_images")
+
+class CORSStaticFiles(StaticFiles):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    async def __call__(self, scope, receive, send):
+        async def send_with_cors(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                headers[b"access-control-allow-origin"] = b"https://pythonlogin-h4ev.onrender.com"
+                headers[b"access-control-allow-credentials"] = b"true"
+                message["headers"] = list(headers.items())
+            await send(message)
+        await super().__call__(scope, receive, send_with_cors)
+
+app.mount("/face_images", CORSStaticFiles(directory=FACE_DIR), name="face_images")
 
 app.include_router(auth_router)
 
