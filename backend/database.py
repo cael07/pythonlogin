@@ -27,6 +27,18 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
-    async with engine.begin() as conn:
-        from .auth.models import User  # noqa: F401
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            from .auth.models import User  # noqa: F401
+            await conn.run_sync(Base.metadata.create_all)
+        print("DATABASE: Tables initialized successfully.")
+    except Exception as e:
+        print(f"DATABASE ERROR during init: {str(e)}")
+
+async def check_db_health():
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(sa.text("SELECT 1"))
+        return True
+    except:
+        return False

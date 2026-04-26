@@ -70,4 +70,10 @@ async def get_me(
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "pythonlogin-auth"}
+    from ..database import check_db_health
+    db_ok = await check_db_health()
+    return {
+        "status": "ok",
+        "database": "online" if db_ok else "offline",
+        "service": "pythonlogin-auth"
+    }
