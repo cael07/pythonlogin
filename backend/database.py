@@ -28,6 +28,11 @@ def get_db():
 def init_db():
     try:
         from .auth.models import User  # noqa: F401
+        
+        # Reset database for testing (drops only tables defined in this app)
+        print("DATABASE: Resetting auth_users table for testing...")
+        Base.metadata.drop_all(bind=engine)
+        
         Base.metadata.create_all(bind=engine)
         print("DATABASE: Tables initialized successfully.")
     except Exception as e:
