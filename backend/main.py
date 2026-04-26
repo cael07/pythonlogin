@@ -21,12 +21,25 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Global exception handler for debugging 500 errors
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"CRITICAL ERROR: {str(exc)}")
+    import traceback
+    traceback.print_exc()
+    return {
+        "detail": "Internal Server Error",
+        "error": str(exc)
+    }, 500
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://pythonlogin-h4ev.onrender.com",
+        "https://pythonlogin-h4ev.onrender.com/",
         "http://localhost:5173",
+        "http://localhost:5173/",
         "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
