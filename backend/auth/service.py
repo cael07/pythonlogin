@@ -28,16 +28,26 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     return result.scalar_one_or_none()
 
 
+import io
+from PIL import Image
+
 def save_face_image(base64_data: str, username: str) -> str:
-    """Save base64 face image to disk and return file path."""
-    # Strip data URL header if present
+    """Save base64 face image to disk using Pillow for validation/compression."""
     if "," in base64_data:
         base64_data = base64_data.split(",", 1)[1]
+    
     img_bytes = base64.b64decode(base64_data)
+    img = Image.open(io.BytesIO(img_bytes))
+    
+    # Convert to RGB (removes alpha if present, required for JPEG)
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+        
     filename = f"{username}_{uuid.uuid4().hex[:8]}.jpg"
     filepath = os.path.join(FACE_IMAGES_DIR, filename)
-    with open(filepath, "wb") as f:
-        f.write(img_bytes)
+    
+    # Save with compression to reduce file size
+    img.save(filepath, "JPEG", quality=85, optimize=True)
     return f"face_images/{filename}"
 
 

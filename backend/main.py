@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
 
@@ -24,13 +25,17 @@ app = FastAPI(
 # Global exception handler for debugging 500 errors
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    print(f"CRITICAL ERROR: {str(exc)}")
     import traceback
-    traceback.print_exc()
-    return {
-        "detail": "Internal Server Error",
-        "error": str(exc)
-    }, 500
+    err_trace = traceback.format_exc()
+    print(f"CRITICAL ERROR:\n{err_trace}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal Server Error",
+            "error": str(exc),
+            "trace": err_trace if os.environ.get("DEBUG") else None
+        }
+    )
 
 # CORS configuration
 app.add_middleware(
