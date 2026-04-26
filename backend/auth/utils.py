@@ -14,17 +14,14 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 import hashlib
 
 def hash_password(password: str) -> str:
-    # Pre-hash with SHA-256 to bypass Bcrypt's 72-character limit
-    # This ensures long passwords work while keeping Bcrypt security
-    password_bytes = password.encode('utf-8')
-    pre_hashed = hashlib.sha256(password_bytes).hexdigest()
-    return pwd_context.hash(pre_hashed)
+    # Fail-safe: Force truncate to 71 chars to guarantee it fits in Bcrypt
+    safe_password = password[:71]
+    return pwd_context.hash(safe_password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    password_bytes = plain.encode('utf-8')
-    pre_hashed = hashlib.sha256(password_bytes).hexdigest()
-    return pwd_context.verify(pre_hashed, hashed)
+    safe_password = plain[:71]
+    return pwd_context.verify(safe_password, hashed)
 
 
 def create_access_token(data: dict[str, Any], app_id: str | None = None) -> str:
