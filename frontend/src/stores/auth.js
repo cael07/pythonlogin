@@ -46,9 +46,14 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function register(formData, faceImage, appId = null) {
-    const data = await authApi.register(formData, faceImage, appId)
-    setAuth(data)
-    return data
+    try {
+      const data = await authApi.register(formData, faceImage, appId)
+      setAuth(data)
+      return data
+    } catch (err) {
+      console.error('Store Register Error:', err)
+      throw err
+    }
   }
 
   return { token, user, isAuthenticated, login, register, logout }

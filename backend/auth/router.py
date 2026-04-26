@@ -14,14 +14,19 @@ def register(
     request: RegisterRequest,
     db: Session = Depends(get_db)
 ):
-    user, access, refresh = service.register_user(
-        db, request.user, request.face_image, request.app_id
-    )
-    return {
-        "access_token": access,
-        "refresh_token": refresh,
-        "user": user
-    }
+    try:
+        user, access, refresh = service.register_user(
+            db, request.user, request.face_image, request.app_id
+        )
+        return {
+            "access_token": access,
+            "refresh_token": refresh,
+            "user": user
+        }
+    except Exception as e:
+        import traceback
+        print(f"REGISTER ERROR:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/login", response_model=TokenPair)
 def login(

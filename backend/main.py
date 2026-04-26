@@ -33,7 +33,11 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "detail": "Internal Server Error",
             "error": str(exc),
-            "trace": err_trace if os.environ.get("DEBUG") else None
+            "trace": err_trace
+        },
+        headers={
+            "Access-Control-Allow-Origin": "https://pythonlogin-h4ev.onrender.com",
+            "Access-Control-Allow-Credentials": "true"
         }
     )
 
