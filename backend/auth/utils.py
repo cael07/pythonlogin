@@ -8,20 +8,16 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use PBKDF2-SHA256 instead of Bcrypt to avoid the 72-character limit
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
-
-import hashlib
 
 def hash_password(password: str) -> str:
-    # Fail-safe: Force truncate to 71 chars to guarantee it fits in Bcrypt
-    safe_password = password[:71]
-    return pwd_context.hash(safe_password)
+    return pwd_context.hash(password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    safe_password = plain[:71]
-    return pwd_context.verify(safe_password, hashed)
+    return pwd_context.verify(plain, hashed)
 
 
 def create_access_token(data: dict[str, Any], app_id: str | None = None) -> str:
