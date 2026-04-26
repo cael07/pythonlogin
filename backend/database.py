@@ -1,49 +1,42 @@
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-_url = os.environ.get("DATABASE_URL", f"sqlite+aiosqlite:///{os.path.join(BASE_DIR, 'auth.db')}")
+_url = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'auth.db')}")
 
-# Support Render's 'postgres://' format and convert to async driver
+# Fix Render's 'postgres://' for SQLAlchemy 2.0
 if _url.startswith("postgres://"):
-    _url = _url.replace("postgres://", "postgresql+asyncpg://", 1)
-elif _url.startswith("postgresql://"):
-    _url = _url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    _url = _url.replace("postgres://", "postgresql://", 1)
 
 DATABASE_URL = _url
 
-# SSL configuration for production (PostgreSQL)
-connect_args = {}
-if "postgresql" in DATABASE_URL:
-    connect_args["ssl"] = "require"
-
-engine = create_async_engine(DATABASE_URL, echo=False, connect_args=connect_args)
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
-
+# Use simple engine like in inventory project
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 class Base(DeclarativeBase):
     pass
 
-
-async def get_db() -> AsyncSession:
-    async with AsyncSessionLocal() as session:
-        yield session
-
-
-async def init_db():
+def get_db():
+    db = SessionLocal()
     try:
-        async with engine.begin() as conn:
-            from .auth.models import User  # noqa: F401
-            await conn.run_sync(Base.metadata.create_all)
+        yield db
+    finally:
+        db.close()
+
+def init_db():
+    try:
+        from .auth.models import User  # noqa: F401
+        Base.metadata.create_all(bind=engine)
         print("DATABASE: Tables initialized successfully.")
     except Exception as e:
         print(f"DATABASE ERROR during init: {str(e)}")
 
-async def check_db_health():
+def check_db_health():
     try:
-        async with engine.connect() as conn:
-            await conn.execute(sa.text("SELECT 1"))
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         return True
     except Exception as e:
         print(f"DATABASE HEALTH CHECK FAILED: {str(e)}")

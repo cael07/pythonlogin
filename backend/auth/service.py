@@ -1,9 +1,11 @@
 import os
 import base64
 import uuid
-from sqlalchemy.ext.asyncio import AsyncSession
+import io
+from sqlalchemy.orm import Session
 from sqlalchemy import select
 from fastapi import HTTPException, status
+from PIL import Image
 
 from .models import User
 from .schemas import UserRegister, UserLogin
@@ -13,23 +15,17 @@ FACE_IMAGES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "face
 os.makedirs(FACE_IMAGES_DIR, exist_ok=True)
 
 
-async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
-    result = await db.execute(select(User).where(User.username == username))
-    return result.scalar_one_or_none()
+def get_user_by_username(db: Session, username: str) -> User | None:
+    return db.query(User).filter(User.username == username).first()
 
 
-async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    result = await db.execute(select(User).where(User.email == email))
-    return result.scalar_one_or_none()
+def get_user_by_email(db: Session, email: str) -> User | None:
+    return db.query(User).filter(User.email == email).first()
 
 
-async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
-    result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
+def get_user_by_id(db: Session, user_id: int) -> User | None:
+    return db.query(User).filter(User.id == user_id).first()
 
-
-import io
-from PIL import Image
 
 def save_face_image(base64_data: str, username: str) -> str:
     """Save base64 face image to disk using Pillow for validation/compression."""
@@ -51,16 +47,16 @@ def save_face_image(base64_data: str, username: str) -> str:
     return f"face_images/{filename}"
 
 
-async def register_user(
-    db: AsyncSession,
+def register_user(
+    db: Session,
     data: UserRegister,
     face_image_b64: str | None,
     app_id: str | None,
 ) -> tuple[User, str, str]:
     # Check uniqueness
-    if await get_user_by_username(db, data.username):
+    if get_user_by_username(db, data.username):
         raise HTTPException(status_code=400, detail="Username already taken")
-    if await get_user_by_email(db, data.email):
+    if get_user_by_email(db, data.email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     face_path = None
@@ -75,20 +71,20 @@ async def register_user(
         face_image_path=face_path,
     )
     db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    db.commit()
+    db.refresh(user)
 
     access_token = create_access_token({"sub": str(user.id)}, app_id)
     refresh_token = create_refresh_token({"sub": str(user.id)})
     return user, access_token, refresh_token
 
 
-async def login_user(
-    db: AsyncSession,
+def login_user(
+    db: Session,
     data: UserLogin,
     app_id: str | None,
 ) -> tuple[User, str, str]:
-    user = await get_user_by_username(db, data.username)
+    user = get_user_by_username(db, data.username)
     
     # Check password OR allow biometric bypass for demo
     is_password_correct = user and verify_password(data.password, user.password_hash)
@@ -102,26 +98,19 @@ async def login_user(
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
 
-    # If face_image is provided, we could perform verification here.
-    # For now, we allow the login if the frontend blink-detection passed.
-    # We could also save this login-attempt face for audit logs.
-    if data.face_image:
-        # Optional: save_face_image(data.face_image, f"login_{user.username}")
-        pass
-
     access_token = create_access_token({"sub": str(user.id)}, app_id)
     refresh_token = create_refresh_token({"sub": str(user.id)})
     return user, access_token, refresh_token
 
 
-async def get_current_user_from_token(db: AsyncSession, token: str) -> User:
+def get_current_user_from_token(db: Session, token: str) -> User:
     payload = decode_token(token)
     if not payload or payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
-    user = await get_user_by_id(db, int(user_id))
+    user = get_user_by_id(db, int(user_id))
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user

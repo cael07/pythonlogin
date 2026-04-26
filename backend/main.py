@@ -11,7 +11,7 @@ from .auth.router import router as auth_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
+    init_db()
     yield
 
 
