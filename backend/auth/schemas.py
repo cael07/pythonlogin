@@ -44,7 +44,8 @@ class UserOut(BaseModel):
     full_name: str
     username: str
     email: str
-    face_image_path: Optional[str]
+    face_image_path: str | None = None
+    face_image_base64: str | None = None
     is_active: bool
     created_at: datetime
 

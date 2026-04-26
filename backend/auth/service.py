@@ -15,16 +15,35 @@ FACE_IMAGES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "face
 os.makedirs(FACE_IMAGES_DIR, exist_ok=True)
 
 
-def get_user_by_username(db: Session, username: str) -> User | None:
-    return db.query(User).filter(User.username == username).first()
+def get_user_by_id(db: Session, user_id: int):
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and user.face_image_path:
+        user.face_image_base64 = get_image_base64(user.face_image_path)
+    return user
+
+
+def get_user_by_username(db: Session, username: str):
+    user = db.query(User).filter(User.username == username).first()
+    if user and user.face_image_path:
+        user.face_image_base64 = get_image_base64(user.face_image_path)
+    return user
+
+
+def get_image_base64(path: str) -> str | None:
+    try:
+        import base64
+        file_path = os.path.join(os.path.dirname(FACE_IMAGES_DIR), path)
+        if os.path.exists(file_path):
+            with open(file_path, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+                return f"data:image/jpeg;base64,{encoded}"
+    except Exception as e:
+        print(f"ERROR converting image to base64: {str(e)}")
+    return None
 
 
 def get_user_by_email(db: Session, email: str) -> User | None:
     return db.query(User).filter(User.email == email).first()
-
-
-def get_user_by_id(db: Session, user_id: int) -> User | None:
-    return db.query(User).filter(User.id == user_id).first()
 
 
 def save_face_image(base64_data: str, username: str) -> str:

@@ -18,8 +18,8 @@
 
       <!-- User card -->
       <div class="user-card glass">
-        <div v-if="user?.face_image_path" class="user-face-container">
-          <img :src="`https://pythonlogin-api.onrender.com/auth/image/${user.username}`" alt="User face" class="user-face-img" />
+        <div v-if="user?.face_image_base64" class="user-face-container">
+          <img :src="user.face_image_base64" alt="User face" class="user-face-img" />
         </div>
         <div v-else class="user-avatar">{{ initials }}</div>
         
