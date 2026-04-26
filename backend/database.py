@@ -3,7 +3,15 @@ from sqlalchemy.orm import DeclarativeBase
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE_URL = f"sqlite+aiosqlite:///{os.path.join(BASE_DIR, 'auth.db')}"
+_url = os.environ.get("DATABASE_URL", f"sqlite+aiosqlite:///{os.path.join(BASE_DIR, 'auth.db')}")
+
+# Support Render's 'postgres://' format and convert to async driver
+if _url.startswith("postgres://"):
+    _url = _url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif _url.startswith("postgresql://"):
+    _url = _url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+DATABASE_URL = _url
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
