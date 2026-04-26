@@ -11,6 +11,11 @@ if _url.startswith("postgres://"):
 elif _url.startswith("postgresql://"):
     _url = _url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+# Ensure SSL is requested for PostgreSQL
+if "postgresql" in _url and "sslmode" not in _url:
+    separator = "&" if "?" in _url else "?"
+    _url += f"{separator}sslmode=require"
+
 DATABASE_URL = _url
 
 engine = create_async_engine(DATABASE_URL, echo=False)
@@ -40,5 +45,6 @@ async def check_db_health():
         async with engine.connect() as conn:
             await conn.execute(sa.text("SELECT 1"))
         return True
-    except:
+    except Exception as e:
+        print(f"DATABASE HEALTH CHECK FAILED: {str(e)}")
         return False
