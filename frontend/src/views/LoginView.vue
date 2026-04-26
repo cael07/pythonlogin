@@ -113,8 +113,9 @@ const apiStatus = ref('checking') // checking | online | offline
 
 onMounted(async () => {
   // Check API health
+  const apiBase = import.meta.env.VITE_API_URL || 'https://pythonlogin-api.onrender.com/auth'
   try {
-    const res = await fetch(`${import.meta.env.VITE_API_URL || '/auth'}/health`)
+    const res = await fetch(`${apiBase}/health`)
     if (res.ok) apiStatus.value = 'online'
     else apiStatus.value = 'offline'
   } catch (e) {
