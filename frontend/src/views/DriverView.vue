@@ -1,36 +1,68 @@
 <template>
-  <div class="driver-container">
-    <header class="header">
-      <h1>Driver Mode</h1>
-      <button @click="$router.push('/dashboard')" class="btn-secondary">Back to Dashboard</button>
-    </header>
+  <div class="driver-layout">
+    <!-- Fullscreen Map Background -->
+    <div id="driver-map" class="map-container"></div>
 
-    <div class="content-section">
-      <div class="sidebar panel">
-        <h3>Available Requests</h3>
-        <button @click="rideStore.fetchBookings()" class="btn-secondary mt-2 mb-3 w-100">Refresh</button>
+    <!-- Top Overlay Elements -->
+    <div class="top-overlay">
+      <button class="back-btn" @click="$router.push('/dashboard')">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      </button>
+
+      <!-- Status Card -->
+      <div class="route-card glass">
+        <div class="route-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="margin: 0;">Driver Mode</h3>
+          <button @click="rideStore.fetchBookings()" class="refresh-btn">
+             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Sheet -->
+    <div class="bottom-sheet glass">
+      <div class="drag-handle"></div>
+
+      <div v-if="!rideStore.currentBooking">
+        <h3 class="sheet-title">Incoming Requests ({{ rideStore.bookings.length }})</h3>
         
-        <div v-if="rideStore.bookings.length === 0">
-          <p class="text-muted">No rides available right now.</p>
+        <div v-if="rideStore.bookings.length === 0" class="empty-state">
+          <div class="radar-pulse">📡</div>
+          <p>Looking for passengers...</p>
         </div>
         
-        <div v-for="booking in rideStore.bookings" :key="booking.id" class="booking-card">
-          <div v-if="booking.status === 'pending'">
-            <p><strong>Pickup:</strong> {{ booking.pickup_lat.toFixed(4) }}, {{ booking.pickup_lng.toFixed(4) }}</p>
-            <p><strong>Dropoff:</strong> {{ booking.dropoff_lat.toFixed(4) }}, {{ booking.dropoff_lng.toFixed(4) }}</p>
-            <button @click="acceptRide(booking)" class="btn-primary mt-2">Accept Ride</button>
+        <div class="requests-list">
+          <div v-for="booking in rideStore.bookings" :key="booking.id" class="booking-card">
+            <div class="route-preview">
+              <div class="loc-row">
+                <span class="dot pickup-dot"></span>
+                <span>Pickup: {{ booking.pickup_lat.toFixed(4) }}, {{ booking.pickup_lng.toFixed(4) }}</span>
+              </div>
+              <div class="loc-row">
+                <span class="dot dropoff-dot"></span>
+                <span>Dropoff: {{ booking.dropoff_lat.toFixed(4) }}, {{ booking.dropoff_lng.toFixed(4) }}</span>
+              </div>
+            </div>
+            <button @click="acceptRide(booking)" class="btn-primary mt-2 w-100">Accept Request</button>
           </div>
-        </div>
-
-        <div v-if="rideStore.currentBooking" class="active-ride-panel mt-4">
-          <h3>Active Ride</h3>
-          <p><strong>Status:</strong> Driving to passenger...</p>
-          <p class="text-success blink">Simulating Movement...</p>
         </div>
       </div>
 
-      <div class="map-container">
-        <div id="driver-map" class="map"></div>
+      <div v-else class="status-panel">
+        <h3 class="sheet-title">Active Ride</h3>
+        
+        <div class="status-content">
+          <div class="accepted">
+            <div class="driver-info">
+              <div class="driver-avatar blink-fast">🚗</div>
+              <div>
+                <h4>Driving to passenger...</h4>
+                <p>Location updating live</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -48,54 +80,86 @@ let map = null
 let driverMarker = null
 let passengerMarker = null
 let animationInterval = null
+let watchId = null
 
-// Initial dummy driver location
+// Real or fallback driver location
 const driverLocation = ref({ lat: 14.5800, lng: 120.9700 })
+
+const carIcon = L.divIcon({
+  className: 'custom-map-marker',
+  html: `<div class="marker-pin car-pin">🚗</div>`,
+  iconSize: [40, 40],
+  iconAnchor: [20, 20]
+})
+
+const userIcon = L.divIcon({
+  className: 'custom-map-marker',
+  html: `<div class="marker-pin pickup-pin">👤</div>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15]
+})
 
 onMounted(async () => {
   rideStore.connectWebSocket()
   await rideStore.fetchBookings()
 
-  map = L.map('driver-map').setView([driverLocation.value.lat, driverLocation.value.lng], 13)
+  map = L.map('driver-map', { zoomControl: false }).setView([driverLocation.value.lat, driverLocation.value.lng], 15)
   
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
   }).addTo(map)
 
-  const carIcon = L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
-    iconSize: [25, 41], iconAnchor: [12, 41]
-  })
+  // Try Geolocating the driver
+  if ("geolocation" in navigator) {
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        driverLocation.value = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        }
+        updateDriverMarker()
+        if (!map.userHasMoved && !rideStore.currentBooking) {
+          map.setView([driverLocation.value.lat, driverLocation.value.lng], 15)
+        }
+      },
+      (error) => {
+        console.error("Driver Geolocation Error:", error)
+        updateDriverMarker()
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  } else {
+    updateDriverMarker()
+  }
 
-  driverMarker = L.marker([driverLocation.value.lat, driverLocation.value.lng], { icon: carIcon })
-    .addTo(map)
-    .bindPopup('You are here')
+  map.on('dragstart', () => { map.userHasMoved = true })
 })
 
 onUnmounted(() => {
   if (map) map.remove()
   if (animationInterval) clearInterval(animationInterval)
+  if (watchId && navigator.geolocation) navigator.geolocation.clearWatch(watchId)
 })
+
+const updateDriverMarker = () => {
+  if (!driverMarker) {
+    driverMarker = L.marker([driverLocation.value.lat, driverLocation.value.lng], { icon: carIcon }).addTo(map)
+  } else {
+    driverMarker.setLatLng([driverLocation.value.lat, driverLocation.value.lng])
+  }
+}
 
 const acceptRide = async (booking) => {
   const success = await rideStore.acceptBooking(booking.id)
   if (success) {
-    const userIcon = L.icon({
-      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
-      iconSize: [25, 41], iconAnchor: [12, 41]
-    })
-    
     // Show passenger pickup
-    passengerMarker = L.marker([booking.pickup_lat, booking.pickup_lng], { icon: userIcon })
-      .addTo(map)
-      .bindPopup('Passenger')
-      .openPopup()
+    passengerMarker = L.marker([booking.pickup_lat, booking.pickup_lng], { icon: userIcon }).addTo(map)
       
     // Re-center map to show both
     const bounds = L.latLngBounds([driverLocation.value.lat, driverLocation.value.lng], [booking.pickup_lat, booking.pickup_lng])
-    map.fitBounds(bounds, { padding: [50, 50] })
+    map.flyToBounds(bounds, { padding: [50, 50], animate: true })
     
-    // Simulate movement
+    // Simulate movement towards passenger
     startSimulation(booking)
   }
 }
@@ -104,7 +168,6 @@ const startSimulation = (booking) => {
   const targetLat = booking.pickup_lat
   const targetLng = booking.pickup_lng
   
-  // Total steps to reach destination
   const steps = 60
   let currentStep = 0
   
@@ -116,78 +179,180 @@ const startSimulation = (booking) => {
     driverLocation.value.lat += latStep
     driverLocation.value.lng += lngStep
     
-    // Update marker on map
-    if (driverMarker) {
-      driverMarker.setLatLng([driverLocation.value.lat, driverLocation.value.lng])
-    }
+    updateDriverMarker()
     
-    // Send to websocket so passenger sees it
+    // Send to websocket
     rideStore.sendLocationUpdate(booking.id, booking.passenger_id, driverLocation.value.lat, driverLocation.value.lng)
     
+    // Follow the car during simulation
+    map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
+
     if (currentStep >= steps) {
       clearInterval(animationInterval)
       alert("Arrived at pickup location!")
     }
-  }, 500) // Update every 500ms
+  }, 500)
 }
 
 </script>
 
 <style scoped>
-.driver-container {
-  padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-.content-section {
-  display: flex;
-  gap: 20px;
-  height: 600px;
-}
-.sidebar {
-  width: 350px;
-  overflow-y: auto;
-}
-.map-container {
-  flex: 1;
-  border-radius: 12px;
+.driver-layout {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-  z-index: 1;
+  background: #f0f0f0;
 }
-.map {
+
+.map-container {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+  z-index: 1;
 }
-.panel {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+
+:deep(.custom-map-marker) { background: transparent; border: none; }
+:deep(.marker-pin) {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
 }
+:deep(.car-pin) { background: #2e3192; border: 3px solid #fff; }
+:deep(.pickup-pin) { background: #3498db; }
+
+/* UI Overlays */
+.top-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 1rem;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.back-btn {
+  pointer-events: auto;
+  background: #fff;
+  border: none;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  margin-bottom: 1rem;
+  color: #333;
+  cursor: pointer;
+}
+
+.route-card {
+  pointer-events: auto;
+  background: #fff;
+  border-radius: 16px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  border: 1px solid rgba(0,0,0,0.05);
+  color: #333;
+}
+
+.refresh-btn {
+  background: #f0f0f0;
+  border: none;
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+
+/* Bottom Sheet */
+.bottom-sheet {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: #fff;
+  border-radius: 24px 24px 0 0;
+  padding: 1.5rem;
+  z-index: 1000;
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.1);
+  color: #333;
+  max-height: 50vh;
+  display: flex; flex-direction: column;
+}
+
+.drag-handle {
+  width: 40px; height: 4px;
+  background: #ddd; border-radius: 2px;
+  margin: 0 auto 1.5rem auto;
+  flex-shrink: 0;
+}
+
+.sheet-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.requests-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem 0;
+  color: #888;
+}
+
+.radar-pulse {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  animation: radar 2s infinite;
+}
+@keyframes radar {
+  0% { transform: scale(0.9); opacity: 1; }
+  100% { transform: scale(1.2); opacity: 0.5; }
+}
+
 .booking-card {
-  background: #f8f9fa;
-  padding: 15px;
+  padding: 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+
+.loc-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.85rem; color: #555; margin-bottom: 0.4rem;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.pickup-dot { background: #3498db; }
+.dropoff-dot { background: #9b59b6; }
+
+.btn-primary {
+  background: #2e3192;
+  color: #fff;
+  border: none;
+  padding: 0.8rem;
   border-radius: 8px;
-  margin-bottom: 15px;
-  border-left: 4px solid #3498db;
+  font-weight: bold;
 }
 .w-100 { width: 100%; }
-.mt-2 { margin-top: 10px; }
-.mt-4 { margin-top: 20px; }
-.mb-3 { margin-bottom: 15px; }
-.text-muted { color: #7f8c8d; }
-.text-success { color: #2ecc71; font-weight: bold; }
-@keyframes blinker {
-  50% { opacity: 0; }
+
+.driver-info {
+  display: flex; align-items: center; justify-content: center; gap: 1rem;
+  background: #f8f9fa; padding: 1rem; border-radius: 12px;
 }
-.blink {
-  animation: blinker 1s linear infinite;
+.driver-avatar {
+  font-size: 2rem; background: #fff;
+  width: 60px; height: 60px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
+.blink-fast { animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0.6; } }
 </style>
