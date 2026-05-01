@@ -11,17 +11,30 @@ export const useRideStore = defineStore('ride', {
   }),
 
   actions: {
+    getApiHost() {
+      // Find the base API URL correctly using the same env var as auth
+      let base = import.meta.env.VITE_API_URL || 'https://pythonlogin-api.onrender.com';
+      // If VITE_API_URL has /auth at the end, strip it
+      if (base.endsWith('/auth')) {
+        base = base.replace(/\/auth$/, '');
+      }
+      return base;
+    },
+
     connectWebSocket() {
       const auth = useAuthStore()
       if (!auth.user) return
 
-      // Use wss for prod, ws for local based on window.location
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const host = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-                   ? 'localhost:8000' 
-                   : 'pythonlogin-h4ev.onrender.com'
-                   
-      const wsUrl = `${protocol}//${host}/ride/ws/${auth.user.id}`
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      let wsUrl = '';
+      
+      if (isLocal) {
+        wsUrl = `ws://localhost:8000/ride/ws/${auth.user.id}`
+      } else {
+        const base = this.getApiHost();
+        const wsHost = base.replace('http://', 'ws://').replace('https://', 'wss://');
+        wsUrl = `${wsHost}/ride/ws/${auth.user.id}`
+      }
       
       this.ws = new WebSocket(wsUrl)
 
@@ -69,9 +82,9 @@ export const useRideStore = defineStore('ride', {
 
     async fetchBookings() {
       const auth = useAuthStore()
-      const host = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-                   ? 'http://localhost:8000' 
-                   : 'https://pythonlogin-h4ev.onrender.com'
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = isLocal ? 'http://localhost:8000' : this.getApiHost();
+      
       try {
         const res = await fetch(`${host}/ride/bookings`)
         if (res.ok) {
@@ -84,9 +97,9 @@ export const useRideStore = defineStore('ride', {
 
     async createBooking(pickupLat, pickupLng, dropoffLat, dropoffLng) {
       const auth = useAuthStore()
-      const host = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-                   ? 'http://localhost:8000' 
-                   : 'https://pythonlogin-h4ev.onrender.com'
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = isLocal ? 'http://localhost:8000' : this.getApiHost();
+
       try {
         const res = await fetch(`${host}/ride/bookings`, {
           method: 'POST',
@@ -121,9 +134,9 @@ export const useRideStore = defineStore('ride', {
 
     async acceptBooking(bookingId) {
       const auth = useAuthStore()
-      const host = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-                   ? 'http://localhost:8000' 
-                   : 'https://pythonlogin-h4ev.onrender.com'
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = isLocal ? 'http://localhost:8000' : this.getApiHost();
+
       try {
         const res = await fetch(`${host}/ride/bookings/${bookingId}/accept`, {
           method: 'POST',
