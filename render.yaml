@@ -7,6 +7,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0 # Using a stable version, or 3.12.0
+      - key: DATABASE_URL
+        value: postgresql://inventory_db_srkn_user:Ll4V8W4gZlH8hZTcsRDZb4U2Cq4nul3v@dpg-d7qdophkh4rs73fgjfgg-a.oregon-postgres.render.com/inventory_db_srkn
 
   - type: web
     name: pythonlogin-frontend
