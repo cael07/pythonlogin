@@ -43,6 +43,23 @@
         </div>
       </div>
 
+      <!-- Ride Hailing section -->
+      <div class="ride-section glass">
+        <h3 class="token-title">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+          Ride Hailing Application
+        </h3>
+        <p class="token-desc" style="margin-bottom: 1rem;">Choose your mode to continue:</p>
+        <div style="display: flex; gap: 1rem;">
+          <button class="btn btn-primary" style="flex: 1" @click="$router.push('/passenger')">
+            Enter Passenger Mode
+          </button>
+          <button class="btn btn-primary" style="flex: 1; background: #27ae60" @click="$router.push('/driver')">
+            Enter Driver Mode
+          </button>
+        </div>
+      </div>
+
       <!-- App token info -->
       <div class="token-section glass">
         <h3 class="token-title">
@@ -266,7 +283,7 @@ function handleLogout() {
   color: var(--primary-light);
 }
 
-.token-section { padding: 1.5rem; }
+.ride-section, .token-section { padding: 1.5rem; }
 .token-title {
   font-size: 0.95rem;
   font-weight: 600;

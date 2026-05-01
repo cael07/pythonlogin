@@ -7,6 +7,7 @@ import os
 
 from .database import init_db
 from .auth.router import router as auth_router
+from .ride.router import router as ride_router
 
 
 @asynccontextmanager
@@ -77,6 +78,7 @@ class CORSStaticFiles(StaticFiles):
 app.mount("/face_images", CORSStaticFiles(directory=FACE_DIR), name="face_images")
 
 app.include_router(auth_router)
+app.include_router(ride_router)
 
 
 @app.get("/")
