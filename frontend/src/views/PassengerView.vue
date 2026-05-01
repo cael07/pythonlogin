@@ -16,7 +16,7 @@
         </div>
         
         <div class="route-inputs">
-          <div class="input-row relative">
+          <div class="input-row relative" :class="{'active-row': activeSearchType === 'pickup'}">
             <div class="dot pickup-dot"></div>
             <div class="input-content w-100">
               <span class="label">Pickup <span class="badge" v-if="isCurrentLocation">(Current)</span></span>
@@ -29,7 +29,7 @@
             </div>
           </div>
           <div class="input-divider"></div>
-          <div class="input-row relative">
+          <div class="input-row relative" :class="{'active-row': activeSearchType === 'dropoff'}">
             <div class="dot dropoff-dot"></div>
             <div class="input-content w-100">
               <span class="label">Drop-off</span>
@@ -281,19 +281,26 @@ onMounted(() => {
     map.userHasMoved = true
   })
 
-  // Map click for dropoff
+  // Map click for setting locations
   map.on('click', (e) => {
     if (rideStore.currentBooking) return // lock if already booking
 
-    dropoff.value = e.latlng
-    if (dropoffMarker) {
-      dropoffMarker.setLatLng(e.latlng)
+    if (activeSearchType.value === 'pickup') {
+      pickup.value = { lat: e.latlng.lat, lng: e.latlng.lng }
+      isCurrentLocation.value = false
+      updatePickupMarker()
+      reverseGeocode(e.latlng.lat, e.latlng.lng, 'pickup')
     } else {
-      dropoffMarker = L.marker(e.latlng, { icon: destIcon }).addTo(map)
+      // Default to dropoff if null or dropoff is focused
+      dropoff.value = e.latlng
+      if (dropoffMarker) {
+        dropoffMarker.setLatLng(e.latlng)
+      } else {
+        dropoffMarker = L.marker(e.latlng, { icon: destIcon }).addTo(map)
+      }
+      reverseGeocode(e.latlng.lat, e.latlng.lng, 'dropoff')
+      activeSearchType.value = 'dropoff'
     }
-    
-    // Auto-update the text input with address name
-    reverseGeocode(e.latlng.lat, e.latlng.lng, 'dropoff')
   })
 })
 
@@ -461,6 +468,14 @@ watch(() => rideStore.driverLocation, (newLoc) => {
   display: flex;
   align-items: center;
   gap: 1rem;
+  padding: 0.5rem;
+  margin: -0.5rem;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.input-row.active-row {
+  background-color: rgba(46, 49, 146, 0.05); /* subtle blue tint */
 }
 
 .dot {
