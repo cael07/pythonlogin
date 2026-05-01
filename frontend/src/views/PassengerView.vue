@@ -16,21 +16,29 @@
         </div>
         
         <div class="route-inputs">
-          <div class="input-row">
+          <div class="input-row relative">
             <div class="dot pickup-dot"></div>
-            <div class="input-content">
-              <span class="label">Pickup</span>
-              <span class="value" v-if="pickup.lat">{{ pickup.lat.toFixed(4) }}, {{ pickup.lng.toFixed(4) }} <span class="badge" v-if="isCurrentLocation">(Current)</span></span>
-              <span class="value placeholder" v-else>Locating...</span>
+            <div class="input-content w-100">
+              <span class="label">Pickup <span class="badge" v-if="isCurrentLocation">(Current)</span></span>
+              <input type="text" class="location-input" v-model="pickupText" @input="onInput('pickup')" @focus="activeSearchType = 'pickup'" placeholder="Enter Pickup Location" :disabled="rideStore.currentBooking" />
+              <ul class="suggestions-list" v-if="activeSearchType === 'pickup' && suggestions.length > 0">
+                <li v-for="s in suggestions" :key="s.place_id" @click="selectSuggestion(s, 'pickup')">
+                  {{ s.display_name }}
+                </li>
+              </ul>
             </div>
           </div>
           <div class="input-divider"></div>
-          <div class="input-row">
+          <div class="input-row relative">
             <div class="dot dropoff-dot"></div>
-            <div class="input-content">
+            <div class="input-content w-100">
               <span class="label">Drop-off</span>
-              <span class="value" v-if="dropoff">{{ dropoff.lat.toFixed(4) }}, {{ dropoff.lng.toFixed(4) }}</span>
-              <span class="value placeholder blink" v-else>Tap map to set drop-off</span>
+              <input type="text" class="location-input" v-model="dropoffText" @input="onInput('dropoff')" @focus="activeSearchType = 'dropoff'" placeholder="Tap map or search location" :disabled="rideStore.currentBooking" />
+              <ul class="suggestions-list" v-if="activeSearchType === 'dropoff' && suggestions.length > 0">
+                <li v-for="s in suggestions" :key="s.place_id" @click="selectSuggestion(s, 'dropoff')">
+                  {{ s.display_name }}
+                </li>
+              </ul>
             </div>
           </div>
         </div>
@@ -108,6 +116,77 @@ let watchId = null
 const pickup = ref({ lat: 14.5995, lng: 120.9842 }) // default fallback
 const dropoff = ref(null)
 const isCurrentLocation = ref(false)
+const pickupText = ref('')
+const dropoffText = ref('')
+const activeSearchType = ref(null)
+const suggestions = ref([])
+let searchTimeout = null
+
+const reverseGeocode = async (lat, lng, type) => {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+    const data = await res.json()
+    if (data && data.display_name) {
+      const parts = data.display_name.split(',')
+      const shortAddress = parts.slice(0, 2).join(',') // First two parts for brevity
+      if (type === 'pickup') pickupText.value = shortAddress
+      else dropoffText.value = shortAddress
+    }
+  } catch (err) {
+    console.error("Reverse geocoding error:", err)
+  }
+}
+
+const onInput = (type) => {
+  activeSearchType.value = type
+  const query = type === 'pickup' ? pickupText.value : dropoffText.value
+  
+  clearTimeout(searchTimeout)
+  if (!query || query.length < 3) {
+    suggestions.value = []
+    return
+  }
+
+  // Debounce API calls to prevent rate limiting
+  searchTimeout = setTimeout(async () => {
+    try {
+      // Limit to 5 results for dropdown
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=ph`)
+      const data = await res.json()
+      suggestions.value = data || []
+    } catch (err) {
+      console.error("Geocoding autocomplete error:", err)
+    }
+  }, 500)
+}
+
+const selectSuggestion = (suggestion, type) => {
+  const lat = parseFloat(suggestion.lat)
+  const lon = parseFloat(suggestion.lon)
+  const parts = suggestion.display_name.split(',')
+  const shortAddress = parts.slice(0, 2).join(',')
+
+  if (type === 'pickup') {
+    pickupText.value = shortAddress
+    pickup.value = { lat, lng: lon }
+    isCurrentLocation.value = false
+    updatePickupMarker()
+    map.flyTo([lat, lon], 15)
+  } else {
+    dropoffText.value = shortAddress
+    dropoff.value = { lat, lng: lon }
+    if (dropoffMarker) {
+      dropoffMarker.setLatLng([lat, lon])
+    } else {
+      dropoffMarker = L.marker([lat, lon], { icon: destIcon }).addTo(map)
+    }
+    map.flyTo([lat, lon], 15)
+  }
+  
+  // Close suggestions
+  suggestions.value = []
+  activeSearchType.value = null
+}
 
 // Haversine distance calculation in km
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -166,14 +245,18 @@ onMounted(() => {
       (position) => {
         const lat = position.coords.latitude
         const lng = position.coords.longitude
-        pickup.value = { lat, lng }
-        isCurrentLocation.value = true
         
-        updatePickupMarker()
-        
-        // Only auto-center once initially
-        if (!map.userHasMoved) {
-          map.setView([lat, lng], 15)
+        // Only update text on first load or if user hasn't typed a custom one
+        if (!pickupText.value || isCurrentLocation.value) {
+           pickup.value = { lat, lng }
+           isCurrentLocation.value = true
+           reverseGeocode(lat, lng, 'pickup')
+           updatePickupMarker()
+           
+           // Only auto-center once initially
+           if (!map.userHasMoved) {
+             map.setView([lat, lng], 15)
+           }
         }
       },
       (error) => {
@@ -201,6 +284,9 @@ onMounted(() => {
     } else {
       dropoffMarker = L.marker(e.latlng, { icon: destIcon }).addTo(map)
     }
+    
+    // Auto-update the text input with address name
+    reverseGeocode(e.latlng.lat, e.latlng.lng, 'dropoff')
   })
 })
 
@@ -400,6 +486,66 @@ watch(() => rideStore.driverLocation, (newLoc) => {
 }
 .value.placeholder { color: #aaa; font-weight: 500; }
 .badge { color: #3498db; font-size: 0.75rem; }
+
+.location-input {
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #222;
+  width: 100%;
+  padding: 0.25rem 0;
+  outline: none;
+  font-family: inherit;
+}
+.location-input::placeholder {
+  color: #aaa;
+  font-weight: 500;
+}
+.location-input:disabled {
+  background: transparent;
+  color: #666;
+}
+
+.relative { position: relative; }
+.w-100 { width: 100%; }
+
+.suggestions-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  margin-top: 5px;
+  padding: 0;
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 2000;
+  border: 1px solid #eee;
+}
+
+.suggestions-list li {
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  color: #333;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f5f5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestions-list li:hover {
+  background: #f8f9fa;
+  color: #2e3192;
+}
+
+.suggestions-list li:last-child {
+  border-bottom: none;
+}
 
 .blink { animation: textBlink 1.5s infinite; }
 @keyframes textBlink { 50% { opacity: 0.5; } }
