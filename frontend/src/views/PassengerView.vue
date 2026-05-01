@@ -121,6 +121,7 @@ const dropoffText = ref('')
 const activeSearchType = ref(null)
 const suggestions = ref([])
 let searchTimeout = null
+const deviceLocation = ref(null)
 
 const reverseGeocode = async (lat, lng, type) => {
   try {
@@ -139,6 +140,9 @@ const reverseGeocode = async (lat, lng, type) => {
 
 const onInput = (type) => {
   activeSearchType.value = type
+  if (type === 'pickup') {
+    isCurrentLocation.value = false // Stop GPS from overwriting user typing
+  }
   const query = type === 'pickup' ? pickupText.value : dropoffText.value
   
   clearTimeout(searchTimeout)
@@ -246,6 +250,9 @@ onMounted(() => {
         const lat = position.coords.latitude
         const lng = position.coords.longitude
         
+        // Store the raw device location always
+        deviceLocation.value = { lat, lng }
+        
         // Only update text on first load or if user hasn't typed a custom one
         if (!pickupText.value || isCurrentLocation.value) {
            pickup.value = { lat, lng }
@@ -304,9 +311,17 @@ const updatePickupMarker = () => {
 }
 
 const centerOnUser = () => {
-  if (pickup.value.lat) {
-    map.flyTo([pickup.value.lat, pickup.value.lng], 16, { animate: true, duration: 0.8 })
+  if (deviceLocation.value) {
+    const lat = deviceLocation.value.lat;
+    const lng = deviceLocation.value.lng;
+    pickup.value = { lat, lng }
+    isCurrentLocation.value = true
+    map.flyTo([lat, lng], 16, { animate: true, duration: 0.8 })
     map.userHasMoved = false
+    updatePickupMarker()
+    reverseGeocode(lat, lng, 'pickup')
+  } else {
+    alert("Still getting your location...")
   }
 }
 
@@ -554,7 +569,7 @@ watch(() => rideStore.driverLocation, (newLoc) => {
 .gps-btn {
   position: absolute;
   right: 1rem;
-  bottom: calc(200px + 2rem); /* Above bottom sheet */
+  bottom: calc(250px + 2rem); /* Above bottom sheet */
   width: 50px;
   height: 50px;
   border-radius: 50%;
@@ -564,7 +579,7 @@ watch(() => rideStore.driverLocation, (newLoc) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2000;
   color: #333;
   cursor: pointer;
   transition: transform 0.2s;
