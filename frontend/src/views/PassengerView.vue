@@ -55,7 +55,7 @@
               <h4>MC Taxi</h4>
               <p>Beat the traffic</p>
             </div>
-            <div class="ride-price">₱ 152</div>
+            <div class="ride-price">₱ {{ ridePrice }}</div>
           </div>
         </div>
 
@@ -92,7 +92,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import L from 'leaflet'
 import { useRideStore } from '../stores/ride'
 import { useRouter } from 'vue-router'
@@ -108,6 +108,25 @@ let watchId = null
 const pickup = ref({ lat: 14.5995, lng: 120.9842 }) // default fallback
 const dropoff = ref(null)
 const isCurrentLocation = ref(false)
+
+// Haversine distance calculation in km
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+const ridePrice = computed(() => {
+  if (!pickup.value || !dropoff.value) return 50;
+  const dist = calculateDistance(pickup.value.lat, pickup.value.lng, dropoff.value.lat, dropoff.value.lng);
+  // Based on Northville to Monumento being ~152 PHP
+  // Minimum fare 50 PHP
+  return Math.max(50, Math.round(dist * 15.2));
+})
 
 // Custom modern icons
 const userIcon = L.divIcon({
