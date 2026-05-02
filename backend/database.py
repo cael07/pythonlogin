@@ -30,8 +30,8 @@ def init_db():
         from .auth.models import User, Booking  # noqa: F401
         
         # Reset database for testing (drops only tables defined in this app)
-        print("DATABASE: Resetting auth_users table for testing...")
-        Base.metadata.drop_all(bind=engine)
+        # print("DATABASE: Resetting auth_users table for testing...")
+        # Base.metadata.drop_all(bind=engine)
         
         Base.metadata.create_all(bind=engine)
         print("DATABASE: Tables initialized successfully.")

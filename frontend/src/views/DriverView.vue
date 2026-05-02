@@ -37,11 +37,11 @@
             <div class="route-preview">
               <div class="loc-row">
                 <span class="dot pickup-dot"></span>
-                <span>Pickup: {{ booking.pickup_lat.toFixed(4) }}, {{ booking.pickup_lng.toFixed(4) }}</span>
+                <span class="text-truncate">Pickup: {{ addressNames[booking.id]?.pickup || `${booking.pickup_lat.toFixed(4)}, ${booking.pickup_lng.toFixed(4)}` }}</span>
               </div>
               <div class="loc-row">
                 <span class="dot dropoff-dot"></span>
-                <span>Dropoff: {{ booking.dropoff_lat.toFixed(4) }}, {{ booking.dropoff_lng.toFixed(4) }}</span>
+                <span class="text-truncate">Dropoff: {{ addressNames[booking.id]?.dropoff || `${booking.dropoff_lat.toFixed(4)}, ${booking.dropoff_lng.toFixed(4)}` }}</span>
               </div>
             </div>
             <button @click="acceptRide(booking)" class="btn-primary mt-2 w-100">Accept Request</button>
@@ -69,7 +69,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import L from 'leaflet'
 import { useRideStore } from '../stores/ride'
 import { useAuthStore } from '../stores/auth'
@@ -81,6 +81,36 @@ let driverMarker = null
 let passengerMarker = null
 let animationInterval = null
 let watchId = null
+
+const addressNames = ref({})
+
+const resolveAddress = async (lat, lng) => {
+  try {
+    // Add a slight delay to avoid hammering nominatim if many bookings
+    await new Promise(r => setTimeout(r, 200)) 
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+    const data = await res.json()
+    if (data && data.display_name) {
+      const parts = data.display_name.split(',')
+      return parts.slice(0, 3).join(',')
+    }
+  } catch (err) {
+    console.error("Reverse geocoding failed", err)
+  }
+  return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+}
+
+watch(() => rideStore.bookings, async (newBookings) => {
+  for (const b of newBookings) {
+    if (!addressNames.value[b.id]) {
+      // Prevents multiple fetches for the same ID
+      addressNames.value[b.id] = { pickup: 'Resolving...', dropoff: 'Resolving...' }
+      const pickup = await resolveAddress(b.pickup_lat, b.pickup_lng)
+      const dropoff = await resolveAddress(b.dropoff_lat, b.dropoff_lng)
+      addressNames.value[b.id] = { pickup, dropoff }
+    }
+  }
+}, { deep: true, immediate: true })
 
 // Real or fallback driver location
 const driverLocation = ref({ lat: 14.5800, lng: 120.9700 })
