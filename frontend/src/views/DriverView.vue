@@ -21,44 +21,46 @@
     </div>
 
     <!-- Bottom Sheet -->
-    <div class="bottom-sheet glass">
-      <div class="drag-handle"></div>
-
-      <div v-if="!rideStore.currentBooking">
-        <h3 class="sheet-title">Incoming Requests ({{ rideStore.bookings.length }})</h3>
-        
-        <div v-if="rideStore.bookings.length === 0" class="empty-state">
-          <div class="radar-pulse">📡</div>
-          <p>Looking for passengers...</p>
-        </div>
-        
-        <div class="requests-list">
-          <div v-for="booking in rideStore.bookings" :key="booking.id" class="booking-card">
-            <div class="route-preview">
-              <div class="loc-row">
-                <span class="dot pickup-dot"></span>
-                <span class="text-truncate">Pickup: {{ addressNames[booking.id]?.pickup || `${booking.pickup_lat.toFixed(4)}, ${booking.pickup_lng.toFixed(4)}` }}</span>
-              </div>
-              <div class="loc-row">
-                <span class="dot dropoff-dot"></span>
-                <span class="text-truncate">Dropoff: {{ addressNames[booking.id]?.dropoff || `${booking.dropoff_lat.toFixed(4)}, ${booking.dropoff_lng.toFixed(4)}` }}</span>
-              </div>
-            </div>
-            <button @click="acceptRide(booking)" class="btn-primary mt-2 w-100">Accept Request</button>
-          </div>
-        </div>
+    <div :class="['bottom-sheet', 'glass', { expanded: isSheetExpanded }]">
+      <div class="sheet-header" @click="isSheetExpanded = !isSheetExpanded">
+        <div class="drag-handle"></div>
+        <h3 v-if="!rideStore.currentBooking" class="sheet-title">Incoming Requests ({{ rideStore.bookings.length }})</h3>
+        <h3 v-else class="sheet-title">Active Ride</h3>
       </div>
 
-      <div v-else class="status-panel">
-        <h3 class="sheet-title">Active Ride</h3>
-        
-        <div class="status-content">
-          <div class="accepted">
-            <div class="driver-info">
-              <div class="driver-avatar blink-fast">🚗</div>
-              <div>
-                <h4>Driving to passenger...</h4>
-                <p>Location updating live</p>
+      <div class="sheet-content-wrapper">
+        <div v-if="!rideStore.currentBooking" class="h-100 flex-col">
+          <div v-if="rideStore.bookings.length === 0" class="empty-state">
+            <div class="radar-pulse">📡</div>
+            <p>Looking for passengers...</p>
+          </div>
+          
+          <div class="requests-list">
+            <div v-for="booking in rideStore.bookings" :key="booking.id" class="booking-card">
+              <div class="route-preview">
+                <div class="loc-row">
+                  <span class="dot pickup-dot"></span>
+                  <span class="text-truncate">Pickup: {{ addressNames[booking.id]?.pickup || `${booking.pickup_lat.toFixed(4)}, ${booking.pickup_lng.toFixed(4)}` }}</span>
+                </div>
+                <div class="loc-row">
+                  <span class="dot dropoff-dot"></span>
+                  <span class="text-truncate">Dropoff: {{ addressNames[booking.id]?.dropoff || `${booking.dropoff_lat.toFixed(4)}, ${booking.dropoff_lng.toFixed(4)}` }}</span>
+                </div>
+              </div>
+              <button @click="acceptRide(booking)" class="btn-primary mt-2 w-100">Accept Request</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="status-panel">
+          <div class="status-content">
+            <div class="accepted">
+              <div class="driver-info">
+                <div class="driver-avatar blink-fast">🚗</div>
+                <div>
+                  <h4>Driving to passenger...</h4>
+                  <p>Location updating live</p>
+                </div>
               </div>
             </div>
           </div>
@@ -82,6 +84,7 @@ let passengerMarker = null
 let animationInterval = null
 let watchId = null
 
+const isSheetExpanded = ref(false)
 const addressNames = ref({})
 
 const resolveAddress = async (lat, lng) => {
@@ -304,25 +307,49 @@ const startSimulation = (booking) => {
   bottom: 0; left: 0; right: 0;
   background: #fff;
   border-radius: 24px 24px 0 0;
-  padding: 1.5rem;
+  padding: 0;
   z-index: 1000;
   box-shadow: 0 -8px 24px rgba(0,0,0,0.1);
   color: #333;
-  max-height: 50vh;
+  height: 55vh;
   display: flex; flex-direction: column;
+  transform: translateY(calc(100% - 85px));
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
+.bottom-sheet.expanded {
+  transform: translateY(0);
+}
+
+.sheet-header {
+  padding: 1.5rem 1.5rem 0.5rem 1.5rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sheet-content-wrapper {
+  padding: 0 1.5rem 1.5rem 1.5rem;
+  overflow-y: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.bottom-sheet.expanded .sheet-content-wrapper {
+  overflow-y: auto;
+}
+.h-100 { height: 100%; }
+.flex-col { display: flex; flex-direction: column; }
 
 .drag-handle {
   width: 40px; height: 4px;
   background: #ddd; border-radius: 2px;
-  margin: 0 auto 1.5rem auto;
+  margin: 0 auto 1rem auto;
   flex-shrink: 0;
 }
 
 .sheet-title {
   font-size: 1.1rem;
   font-weight: 700;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
   text-align: center;
   flex-shrink: 0;
 }
