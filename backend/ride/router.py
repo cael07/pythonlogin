@@ -87,14 +87,34 @@ async def accept_booking(booking_id: int, request: AcceptBooking, db: Session = 
     booking.status = "accepted"
     db.commit()
     
+    driver = db.query(User).filter(User.id == request.driver_id).first()
+    
     # Notify passenger that ride was accepted
     await manager.send_personal_message(json.dumps({
         "type": "ride_accepted",
         "booking_id": booking.id,
-        "driver_id": request.driver_id
+        "driver_id": request.driver_id,
+        "driver_name": driver.full_name if driver else "Driver"
     }), booking.passenger_id)
     
     return {"message": "Booking accepted"}
+
+@router.post("/bookings/{booking_id}/arrived")
+async def notify_arrived(booking_id: int, db: Session = Depends(get_db)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    booking.status = "arrived"
+    db.commit()
+    
+    # Notify passenger
+    await manager.send_personal_message(json.dumps({
+        "type": "ride_arrived",
+        "booking_id": booking.id
+    }), booking.passenger_id)
+    
+    return {"message": "Passenger notified of arrival"}
 
 @router.post("/bookings/{booking_id}/cancel")
 async def cancel_booking(booking_id: int, db: Session = Depends(get_db)):

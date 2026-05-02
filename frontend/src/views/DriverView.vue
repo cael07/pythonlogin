@@ -251,6 +251,7 @@ const startSimulation = (booking) => {
 
     if (currentStep >= steps) {
       clearInterval(animationInterval)
+      rideStore.notifyArrived(booking.id)
       alert("Arrived at pickup location!")
     }
   }, 500)

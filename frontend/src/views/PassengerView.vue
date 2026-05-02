@@ -90,8 +90,17 @@
               <div class="driver-info">
                 <div class="driver-avatar">👨‍✈️</div>
                 <div>
-                  <h4>Driver is on the way!</h4>
+                  <h4>{{ rideStore.currentBooking.driver_name || 'Driver' }} is on the way!</h4>
                   <p>Arriving shortly</p>
+                </div>
+              </div>
+            </div>
+            <div v-if="rideStore.currentBooking.status === 'arrived'" class="accepted arrived">
+              <div class="driver-info highlight">
+                <div class="driver-avatar blink-fast">🛵</div>
+                <div>
+                  <h4>Driver has arrived!</h4>
+                  <p>Meet your driver at the pickup point</p>
                 </div>
               </div>
             </div>
@@ -730,6 +739,7 @@ watch(() => rideStore.driverLocation, (newLoc) => {
 }
 .status-badge.pending { background: #fef08a; color: #854d0e; }
 .status-badge.accepted { background: #bbf7d0; color: #166534; }
+.status-badge.arrived { background: #3498db; color: #fff; }
 
 .status-content { margin-top: 1.5rem; text-align: center; }
 .waiting {
@@ -748,6 +758,10 @@ watch(() => rideStore.driverLocation, (newLoc) => {
   padding: 1rem;
   border-radius: 12px;
 }
+.driver-info.highlight {
+  background: #ebf8ff;
+  border: 2px solid #3498db;
+}
 .driver-avatar {
   font-size: 2.5rem;
   background: #fff;
@@ -758,6 +772,9 @@ watch(() => rideStore.driverLocation, (newLoc) => {
   justify-content: center;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
+.blink-fast { animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0.6; } }
+
 .spinner {
   width: 40px;
   height: 40px;

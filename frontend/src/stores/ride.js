@@ -47,6 +47,11 @@ export const useRideStore = defineStore('ride', {
           if (this.currentBooking && this.currentBooking.id === data.booking_id) {
             this.currentBooking.status = 'accepted'
             this.currentBooking.driver_id = data.driver_id
+            this.currentBooking.driver_name = data.driver_name
+          }
+        } else if (data.type === 'ride_arrived') {
+          if (this.currentBooking && this.currentBooking.id === data.booking_id) {
+            this.currentBooking.status = 'arrived'
           }
         } else if (data.type === 'driver_location') {
           if (this.currentBooking && this.currentBooking.id === data.booking_id) {
@@ -88,6 +93,19 @@ export const useRideStore = defineStore('ride', {
 
     dismissBooking(bookingId) {
       this.bookings = this.bookings.filter(b => b.id !== bookingId)
+    },
+
+    async notifyArrived(bookingId) {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = isLocal ? 'http://localhost:8000' : this.getApiHost();
+      
+      try {
+        await fetch(`${host}/ride/bookings/${bookingId}/arrived`, {
+          method: 'POST'
+        })
+      } catch (err) {
+        console.error("Failed to notify arrival:", err)
+      }
     },
 
     async cancelBooking(bookingId) {
