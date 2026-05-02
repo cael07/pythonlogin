@@ -47,7 +47,10 @@
                   <span class="text-truncate">Dropoff: {{ addressNames[booking.id]?.dropoff || `${booking.dropoff_lat.toFixed(4)}, ${booking.dropoff_lng.toFixed(4)}` }}</span>
                 </div>
               </div>
-              <button @click="acceptRide(booking)" class="btn-primary mt-2 w-100">Accept Request</button>
+              <div class="d-flex gap-2 mt-2">
+                <button @click="acceptRide(booking)" class="btn-primary flex-1">Accept</button>
+                <button @click="rideStore.dismissBooking(booking.id)" class="btn-secondary flex-1">Dismiss</button>
+              </div>
             </div>
           </div>
         </div>
@@ -63,6 +66,7 @@
                 </div>
               </div>
             </div>
+            <button class="btn-secondary mt-3 w-100" @click="cancelRide">Cancel Ride</button>
           </div>
         </div>
       </div>
@@ -196,6 +200,31 @@ const acceptRide = async (booking) => {
     startSimulation(booking)
   }
 }
+
+const cancelRide = async () => {
+  if (rideStore.currentBooking) {
+    await rideStore.cancelBooking(rideStore.currentBooking.id)
+  }
+}
+
+// Watch for ride cancellation cleanup
+watch(() => rideStore.currentBooking, (newVal, oldVal) => {
+  if (!newVal && oldVal) {
+    // Ride was cancelled or ended
+    if (passengerMarker) {
+      map.removeLayer(passengerMarker)
+      passengerMarker = null
+    }
+    if (animationInterval) {
+      clearInterval(animationInterval)
+      animationInterval = null
+    }
+    // If it was cancelled by someone else, notify
+    if (oldVal.status !== 'completed') {
+       alert("Ride has been cancelled.")
+    }
+  }
+})
 
 const startSimulation = (booking) => {
   const targetLat = booking.pickup_lat
@@ -398,6 +427,19 @@ const startSimulation = (booking) => {
   border-radius: 8px;
   font-weight: bold;
 }
+.btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-weight: bold;
+}
+.d-flex { display: flex; }
+.gap-2 { gap: 0.5rem; }
+.flex-1 { flex: 1; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 0.75rem; }
 .w-100 { width: 100%; }
 
 .driver-info {

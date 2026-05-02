@@ -52,6 +52,12 @@ export const useRideStore = defineStore('ride', {
           if (this.currentBooking && this.currentBooking.id === data.booking_id) {
             this.driverLocation = { lat: data.lat, lng: data.lng }
           }
+        } else if (data.type === 'ride_cancelled') {
+          if (this.currentBooking && this.currentBooking.id === data.booking_id) {
+            this.currentBooking = null
+            this.driverLocation = null
+          }
+          this.bookings = this.bookings.filter(b => b.id !== data.booking_id)
         }
       }
       
@@ -78,6 +84,30 @@ export const useRideStore = defineStore('ride', {
           lng: lng
         }))
       }
+    },
+
+    dismissBooking(bookingId) {
+      this.bookings = this.bookings.filter(b => b.id !== bookingId)
+    },
+
+    async cancelBooking(bookingId) {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = isLocal ? 'http://localhost:8000' : this.getApiHost();
+      
+      try {
+        const res = await fetch(`${host}/ride/bookings/${bookingId}/cancel`, {
+          method: 'POST'
+        })
+        if (res.ok) {
+          this.currentBooking = null
+          this.driverLocation = null
+          this.bookings = this.bookings.filter(b => b.id !== bookingId)
+          return true
+        }
+      } catch (err) {
+        console.error("Failed to cancel booking:", err)
+      }
+      return false
     },
 
     async fetchBookings() {

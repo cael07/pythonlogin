@@ -96,6 +96,27 @@ async def accept_booking(booking_id: int, request: AcceptBooking, db: Session = 
     
     return {"message": "Booking accepted"}
 
+@router.post("/bookings/{booking_id}/cancel")
+async def cancel_booking(booking_id: int, db: Session = Depends(get_db)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    booking.status = "cancelled"
+    db.commit()
+    
+    # Notify both the driver (if exists) and the passenger
+    cancel_msg = json.dumps({
+        "type": "ride_cancelled",
+        "booking_id": booking.id
+    })
+    
+    await manager.send_personal_message(cancel_msg, booking.passenger_id)
+    if booking.driver_id:
+        await manager.send_personal_message(cancel_msg, booking.driver_id)
+        
+    return {"message": "Booking cancelled"}
+
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int):
     await manager.connect(websocket, user_id)

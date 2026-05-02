@@ -95,6 +95,7 @@
                 </div>
               </div>
             </div>
+            <button class="btn-secondary mt-3 w-100" @click="cancelRide">Cancel Ride</button>
           </div>
         </div>
       </div>
@@ -344,6 +345,27 @@ const requestRide = async () => {
   const bounds = L.latLngBounds([pickup.value.lat, pickup.value.lng], [dropoff.value.lat, dropoff.value.lng])
   map.flyToBounds(bounds, { padding: [50, 50], animate: true })
 }
+
+const cancelRide = async () => {
+  if (rideStore.currentBooking) {
+    await rideStore.cancelBooking(rideStore.currentBooking.id)
+  }
+}
+
+// Watch for ride cancellation cleanup
+watch(() => rideStore.currentBooking, (newVal, oldVal) => {
+  if (!newVal && oldVal) {
+    // Ride was cancelled or ended
+    if (driverMarker) {
+      map.removeLayer(driverMarker)
+      driverMarker = null
+    }
+    // If it was cancelled by someone else, notify
+    if (oldVal.status !== 'completed') {
+       alert("Ride has been cancelled.")
+    }
+  }
+})
 
 // Watch for driver location updates
 watch(() => rideStore.driverLocation, (newLoc) => {
@@ -688,6 +710,16 @@ watch(() => rideStore.driverLocation, (newLoc) => {
   width: 100%;
 }
 .btn-large:disabled { background: #ccc; }
+
+.btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-weight: bold;
+}
+.mt-3 { margin-top: 0.75rem; }
 
 .status-badge {
   padding: 0.25rem 0.75rem;
