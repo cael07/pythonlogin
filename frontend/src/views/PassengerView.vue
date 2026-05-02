@@ -51,45 +51,48 @@
     </button>
 
     <!-- Bottom Sheet -->
-    <div class="bottom-sheet glass">
-      <div class="drag-handle"></div>
-
-      <div v-if="!rideStore.currentBooking">
-        <h3 class="sheet-title">Choose your Ride</h3>
-        <div class="ride-options">
-          <div class="ride-option active">
-            <div class="ride-icon">🛵</div>
-            <div class="ride-details">
-              <h4>MC Taxi</h4>
-              <p>Beat the traffic</p>
-            </div>
-            <div class="ride-price">₱ {{ ridePrice }}</div>
-          </div>
-        </div>
-
-        <button 
-          class="btn-primary btn-large book-btn" 
-          @click="requestRide" 
-          :disabled="!dropoff"
-        >
-          Book MC Taxi
-        </button>
+    <div :class="['bottom-sheet', 'glass', { expanded: isSheetExpanded }]">
+      <div class="sheet-header" @click="isSheetExpanded = !isSheetExpanded">
+        <div class="drag-handle"></div>
+        <h3 v-if="!rideStore.currentBooking" class="sheet-title">Choose your Ride</h3>
+        <h3 v-else class="sheet-title">Status: <span :class="['status-badge', rideStore.currentBooking.status]">{{ rideStore.currentBooking.status }}</span></h3>
       </div>
 
-      <div v-else class="status-panel">
-        <h3 class="sheet-title">Status: <span :class="['status-badge', rideStore.currentBooking.status]">{{ rideStore.currentBooking.status }}</span></h3>
-        
-        <div class="status-content">
-          <div v-if="rideStore.currentBooking.status === 'pending'" class="waiting">
-            <div class="spinner"></div>
-            <p>Finding you a driver...</p>
+      <div class="sheet-content-wrapper">
+        <div v-if="!rideStore.currentBooking" class="h-100 flex-col">
+          <div class="ride-options">
+            <div class="ride-option active">
+              <div class="ride-icon">🛵</div>
+              <div class="ride-details">
+                <h4>MC Taxi</h4>
+                <p>Beat the traffic</p>
+              </div>
+              <div class="ride-price">₱ {{ ridePrice }}</div>
+            </div>
           </div>
-          <div v-if="rideStore.currentBooking.status === 'accepted'" class="accepted">
-            <div class="driver-info">
-              <div class="driver-avatar">👨‍✈️</div>
-              <div>
-                <h4>Driver is on the way!</h4>
-                <p>Arriving shortly</p>
+
+          <button 
+            class="btn-primary btn-large book-btn" 
+            @click="requestRide" 
+            :disabled="!dropoff"
+          >
+            Book MC Taxi
+          </button>
+        </div>
+
+        <div v-else class="status-panel">
+          <div class="status-content">
+            <div v-if="rideStore.currentBooking.status === 'pending'" class="waiting">
+              <div class="spinner"></div>
+              <p>Finding you a driver...</p>
+            </div>
+            <div v-if="rideStore.currentBooking.status === 'accepted'" class="accepted">
+              <div class="driver-info">
+                <div class="driver-avatar">👨‍✈️</div>
+                <div>
+                  <h4>Driver is on the way!</h4>
+                  <p>Arriving shortly</p>
+                </div>
               </div>
             </div>
           </div>
@@ -122,6 +125,7 @@ const activeSearchType = ref(null)
 const suggestions = ref([])
 let searchTimeout = null
 const deviceLocation = ref(null)
+const isSheetExpanded = ref(false)
 
 const reverseGeocode = async (lat, lng, type) => {
   try {
@@ -604,31 +608,54 @@ watch(() => rideStore.driverLocation, (newLoc) => {
 /* Bottom Sheet */
 .bottom-sheet {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 0; left: 0; right: 0;
   background: #fff;
   border-radius: 24px 24px 0 0;
-  padding: 1.5rem;
+  padding: 0;
   z-index: 1000;
   box-shadow: 0 -8px 24px rgba(0,0,0,0.1);
   color: #333;
-  backdrop-filter: none;
+  height: 55vh;
+  display: flex; flex-direction: column;
+  transform: translateY(calc(100% - 85px));
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.bottom-sheet.expanded {
+  transform: translateY(0);
 }
 
+.sheet-header {
+  padding: 1.5rem 1.5rem 0.5rem 1.5rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sheet-content-wrapper {
+  padding: 0 1.5rem 1.5rem 1.5rem;
+  overflow-y: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.bottom-sheet.expanded .sheet-content-wrapper {
+  overflow-y: auto;
+}
+.h-100 { height: 100%; }
+.flex-col { display: flex; flex-direction: column; }
+
 .drag-handle {
-  width: 40px;
-  height: 4px;
-  background: #ddd;
-  border-radius: 2px;
-  margin: 0 auto 1.5rem auto;
+  width: 40px; height: 4px;
+  background: #ddd; border-radius: 2px;
+  margin: 0 auto 1rem auto;
+  flex-shrink: 0;
 }
 
 .sheet-title {
   font-size: 1.1rem;
   font-weight: 700;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .ride-options {
