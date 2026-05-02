@@ -379,12 +379,19 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
 // Watch for driver location updates
 watch(() => rideStore.driverLocation, (newLoc) => {
   if (!newLoc) return
+  console.log("PassengerView: Updating driver marker to", newLoc)
   
   if (!driverMarker) {
     driverMarker = L.marker([newLoc.lat, newLoc.lng], { icon: carIcon }).addTo(map)
   } else {
     // Animate smoothly
     driverMarker.setLatLng([newLoc.lat, newLoc.lng])
+  }
+
+  // Auto-zoom to show both passenger and driver
+  if (pickup.value && newLoc) {
+    const bounds = L.latLngBounds([pickup.value.lat, pickup.value.lng], [newLoc.lat, newLoc.lng])
+    map.flyToBounds(bounds, { padding: [100, 100], animate: true, duration: 1 })
   }
 }, { deep: true })
 

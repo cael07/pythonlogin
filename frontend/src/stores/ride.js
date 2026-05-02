@@ -66,7 +66,9 @@ export const useRideStore = defineStore('ride', {
             }
           }
         } else if (data.type === 'driver_location') {
-          if (this.currentBooking && this.currentBooking.id === data.booking_id) {
+          console.log("WS: Received driver location", data)
+          // Using == instead of === for loose type matching just in case
+          if (this.currentBooking && this.currentBooking.id == data.booking_id) {
             this.driverLocation = { lat: data.lat, lng: data.lng }
           }
         } else if (data.type === 'ride_cancelled') {
