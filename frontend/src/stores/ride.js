@@ -42,16 +42,26 @@ export const useRideStore = defineStore('ride', {
         const data = JSON.parse(event.data)
         
         if (data.type === 'new_booking') {
+          console.log("WS: New booking received", data.booking)
           this.bookings.push(data.booking)
         } else if (data.type === 'ride_accepted') {
+          console.log("WS: Ride accepted by driver", data)
           if (this.currentBooking && this.currentBooking.id === data.booking_id) {
-            this.currentBooking.status = 'accepted'
-            this.currentBooking.driver_id = data.driver_id
-            this.currentBooking.driver_name = data.driver_name
+            // Reassign the whole object to ensure Vue detects the change
+            this.currentBooking = {
+              ...this.currentBooking,
+              status: 'accepted',
+              driver_id: data.driver_id,
+              driver_name: data.driver_name
+            }
           }
         } else if (data.type === 'ride_arrived') {
+          console.log("WS: Driver has arrived", data)
           if (this.currentBooking && this.currentBooking.id === data.booking_id) {
-            this.currentBooking.status = 'arrived'
+            this.currentBooking = {
+              ...this.currentBooking,
+              status: 'arrived'
+            }
           }
         } else if (data.type === 'driver_location') {
           if (this.currentBooking && this.currentBooking.id === data.booking_id) {
