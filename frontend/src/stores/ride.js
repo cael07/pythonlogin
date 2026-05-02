@@ -22,21 +22,23 @@ export const useRideStore = defineStore('ride', {
     },
 
     connectWebSocket() {
+      if (this.ws) return
       const auth = useAuthStore()
-      if (!auth.user) return
-
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      let wsUrl = '';
-      
-      if (isLocal) {
-        wsUrl = `ws://localhost:8000/ride/ws/${auth.user.id}`
-      } else {
-        const base = this.getApiHost();
-        const wsHost = base.replace('http://', 'ws://').replace('https://', 'wss://');
-        wsUrl = `${wsHost}/ride/ws/${auth.user.id}`
+      if (!auth.user) {
+        console.warn("WS: No auth user found")
+        return
       }
+
+      const base = this.getApiHost();
+      const wsHost = base.replace('http://', 'ws://').replace('https://', 'wss://');
+      const wsUrl = `${wsHost}/ride/ws/${auth.user.id}`
       
+      console.log("WS: Connecting to", wsUrl)
       this.ws = new WebSocket(wsUrl)
+      
+      this.ws.onopen = () => {
+        console.log("WS: Connection opened")
+      }
 
       this.ws.onmessage = (event) => {
         const data = JSON.parse(event.data)
