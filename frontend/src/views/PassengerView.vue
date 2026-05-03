@@ -129,6 +129,8 @@ let pickupMarker = null
 let dropoffMarker = null
 let driverMarker = null
 let watchId = null
+let routeLine = null
+let lastRouteFetch = 0
 
 const pickup = ref({ lat: 14.5995, lng: 120.9842 }) // default fallback
 const dropoff = ref(null)
@@ -397,6 +399,10 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
       map.removeLayer(driverMarker)
       driverMarker = null
     }
+    if (routeLine) {
+      map.removeLayer(routeLine)
+      routeLine = null
+    }
     // If it was cancelled by someone else, notify
     if (oldVal.status !== 'completed') {
        alert("Ride has been cancelled.")
@@ -404,16 +410,47 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
   }
 })
 
+const fetchRoute = async (start, end) => {
+  try {
+    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`)
+    const data = await res.json()
+    if (data.code === 'Ok' && data.routes.length > 0) {
+      return data.routes[0].geometry.coordinates.map(c => ({ lat: c[1], lng: c[0] }))
+    }
+  } catch (err) {
+    console.warn("Routing error")
+  }
+  return null
+}
+
+const drawRouteLine = (points) => {
+  if (routeLine) map.removeLayer(routeLine)
+  const latLngs = points.map(p => [p.lat, p.lng])
+  routeLine = L.polyline(latLngs, {
+    color: '#3498db',
+    weight: 6,
+    opacity: 0.6,
+    lineJoin: 'round',
+    dashArray: '1, 10'
+  }).addTo(map)
+}
+
 // Watch for driver location updates
-watch(() => rideStore.driverLocation, (newLoc) => {
+watch(() => rideStore.driverLocation, async (newLoc) => {
   if (!newLoc) return
-  console.log("PassengerView: Updating driver marker to", newLoc)
   
   if (!driverMarker) {
     driverMarker = L.marker([newLoc.lat, newLoc.lng], { icon: carIcon }).addTo(map)
   } else {
-    // Animate smoothly
     driverMarker.setLatLng([newLoc.lat, newLoc.lng])
+  }
+
+  // Update path periodically
+  const now = Date.now()
+  if (now - lastRouteFetch > 5000 && pickup.value) {
+    lastRouteFetch = now
+    const points = await fetchRoute(newLoc, pickup.value)
+    if (points) drawRouteLine(points)
   }
 
   // Auto-zoom to show both passenger and driver

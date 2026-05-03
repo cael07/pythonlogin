@@ -99,6 +99,7 @@ let driverMarker = null
 let passengerMarker = null
 let animationInterval = null
 let watchId = null
+let routeLine = null
 
 const isSheetExpanded = ref(false)
 const addressNames = ref({})
@@ -203,18 +204,60 @@ const updateDriverMarker = () => {
   }
 }
 
+const fetchRoute = async (start, end) => {
+  try {
+    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`)
+    const data = await res.json()
+    if (data.code === 'Ok' && data.routes.length > 0) {
+      return data.routes[0].geometry.coordinates.map(c => ({ lat: c[1], lng: c[0] }))
+    }
+  } catch (err) {
+    console.error("Routing error:", err)
+  }
+  return null
+}
+
+const drawRouteLine = (points) => {
+  if (routeLine) map.removeLayer(routeLine)
+  const latLngs = points.map(p => [p.lat, p.lng])
+  routeLine = L.polyline(latLngs, {
+    color: '#2e3192',
+    weight: 6,
+    opacity: 0.6,
+    lineJoin: 'round',
+    dashArray: '1, 10', // subtle dashed look
+    dashOffset: '0'
+  }).addTo(map)
+  
+  // Add a solid line underneath for better visibility
+  L.polyline(latLngs, {
+    color: '#2e3192',
+    weight: 2,
+    opacity: 0.3
+  }).addTo(map)
+}
+
 const acceptRide = async (booking) => {
   const success = await rideStore.acceptBooking(booking.id)
   if (success) {
     // Show passenger pickup
     passengerMarker = L.marker([booking.pickup_lat, booking.pickup_lng], { icon: userIcon }).addTo(map)
       
-    // Re-center map to show both
-    const bounds = L.latLngBounds([driverLocation.value.lat, driverLocation.value.lng], [booking.pickup_lat, booking.pickup_lng])
-    map.flyToBounds(bounds, { padding: [50, 50], animate: true })
+    // Fetch road route
+    const points = await fetchRoute(driverLocation.value, { lat: booking.pickup_lat, lng: booking.pickup_lng })
     
-    // Simulate movement towards passenger
-    startSimulation(booking)
+    if (points) {
+      drawRouteLine(points)
+      // Re-center map to show the whole route
+      const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]))
+      map.flyToBounds(bounds, { padding: [50, 50], animate: true })
+      startSimulation(booking, points)
+    } else {
+      // Fallback to straight line
+      const bounds = L.latLngBounds([driverLocation.value.lat, driverLocation.value.lng], [booking.pickup_lat, booking.pickup_lng])
+      map.flyToBounds(bounds, { padding: [50, 50], animate: true })
+      startSimulation(booking)
+    }
   }
 }
 
@@ -231,6 +274,10 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
     if (passengerMarker) {
       map.removeLayer(passengerMarker)
       passengerMarker = null
+    }
+    if (routeLine) {
+      map.removeLayer(routeLine)
+      routeLine = null
     }
     if (animationInterval) {
       clearInterval(animationInterval)
@@ -254,43 +301,60 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   return R * c
 }
 
-const startSimulation = (booking) => {
+const startSimulation = (booking, routePoints = null) => {
   if (animationInterval) clearInterval(animationInterval)
   
   const targetLat = booking.pickup_lat
   const targetLng = booking.pickup_lng
   
-  // Speed: move ~25 meters every 1.5 seconds
-  const speedMetersPerStep = 25 
-  
-  animationInterval = setInterval(async () => {
-    const dist = getDistance(driverLocation.value.lat, driverLocation.value.lng, targetLat, targetLng)
-    
-    // Check if arrived (within 30 meters)
-    if (dist < 30) {
-      clearInterval(animationInterval)
-      animationInterval = null
-      driverLocation.value = { lat: targetLat, lng: targetLng }
-      updateDriverMarker()
-      await rideStore.notifyArrived(booking.id)
-      return
-    }
+  if (routePoints) {
+    let currentStep = 0
+    animationInterval = setInterval(async () => {
+      if (currentStep >= routePoints.length) {
+        clearInterval(animationInterval)
+        animationInterval = null
+        await rideStore.notifyArrived(booking.id)
+        if (routeLine) map.removeLayer(routeLine)
+        return
+      }
 
-    // Move towards target
-    const ratio = speedMetersPerStep / dist
-    driverLocation.value.lat += (targetLat - driverLocation.value.lat) * ratio
-    driverLocation.value.lng += (targetLng - driverLocation.value.lng) * ratio
-    
-    updateDriverMarker()
-    
-    // Broadcast location to passenger via WebSocket
-    rideStore.updateLocation(booking.id, driverLocation.value.lat, driverLocation.value.lng)
-    
-    // Keep map centered during simulation
-    if (!map.userHasMoved) {
-      map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
-    }
-  }, 1500)
+      driverLocation.value = routePoints[currentStep]
+      updateDriverMarker()
+      
+      // Update route line to show remaining path
+      if (routeLine) {
+        routeLine.setLatLngs(routePoints.slice(currentStep).map(p => [p.lat, p.lng]))
+      }
+
+      rideStore.updateLocation(booking.id, driverLocation.value.lat, driverLocation.value.lng)
+      if (!map.userHasMoved) {
+        map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
+      }
+      currentStep++
+    }, 1000)
+  } else {
+    // Fallback: Straight line simulation
+    const speedMetersPerStep = 25 
+    animationInterval = setInterval(async () => {
+      const dist = getDistance(driverLocation.value.lat, driverLocation.value.lng, targetLat, targetLng)
+      if (dist < 30) {
+        clearInterval(animationInterval)
+        animationInterval = null
+        driverLocation.value = { lat: targetLat, lng: targetLng }
+        updateDriverMarker()
+        await rideStore.notifyArrived(booking.id)
+        return
+      }
+      const ratio = speedMetersPerStep / dist
+      driverLocation.value.lat += (targetLat - driverLocation.value.lat) * ratio
+      driverLocation.value.lng += (targetLng - driverLocation.value.lng) * ratio
+      updateDriverMarker()
+      rideStore.updateLocation(booking.id, driverLocation.value.lat, driverLocation.value.lng)
+      if (!map.userHasMoved) {
+        map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
+      }
+    }, 1500)
+  }
 }
 
 </script>
