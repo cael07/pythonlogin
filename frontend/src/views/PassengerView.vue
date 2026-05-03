@@ -19,7 +19,12 @@
             <div class="dot pickup-dot"></div>
             <div class="input-content w-100">
               <span class="label">Pickup <span class="badge" v-if="isCurrentLocation">(Current)</span></span>
-              <input type="text" class="location-input" v-model="pickupText" @input="onInput('pickup')" @focus="activeSearchType = 'pickup'" placeholder="Enter Pickup Location" :disabled="rideStore.currentBooking" />
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="text" class="location-input" v-model="pickupText" @input="onInput('pickup')" @focus="activeSearchType = 'pickup'" placeholder="Enter Pickup Location" :disabled="rideStore.currentBooking" />
+                <button v-if="!rideStore.currentBooking" class="gps-btn-inline" @click="centerOnUser" title="Current Location">
+                   <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+                </button>
+              </div>
               <ul class="suggestions-list" v-if="activeSearchType === 'pickup' && suggestions.length > 0">
                 <li v-for="s in suggestions" :key="s.place_id" @click="selectSuggestion(s, 'pickup')">
                   {{ s.display_name }}
@@ -43,11 +48,6 @@
         </div>
       </div>
     </div>
-
-    <!-- GPS Center Button -->
-    <button class="gps-btn" @click="centerOnUser" aria-label="Center Map">
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
-    </button>
 
     <!-- Bottom Sheet -->
     <div :class="['bottom-sheet', 'glass', { expanded: isSheetExpanded }]">
@@ -645,26 +645,24 @@ watch(() => rideStore.driverLocation, (newLoc) => {
 .blink { animation: textBlink 1.5s infinite; }
 @keyframes textBlink { 50% { opacity: 0.5; } }
 
-/* GPS Button */
-.gps-btn {
-  position: absolute;
-  right: 1rem;
-  bottom: calc(250px + 2rem); /* Above bottom sheet */
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: #fff;
+.gps-btn-inline {
+  background: transparent;
   border: none;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
-  color: #333;
+  color: #3498db;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
 }
-.gps-btn:active { transform: scale(0.95); }
+.gps-btn-inline:hover {
+  background: rgba(52, 152, 219, 0.1);
+}
+.gps-btn-inline:active { transform: scale(0.9); }
 
 /* Bottom Sheet */
 .bottom-sheet {
