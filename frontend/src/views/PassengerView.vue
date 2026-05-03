@@ -273,6 +273,7 @@ const carIcon = L.divIcon({
 onMounted(async () => {
   rideStore.connectWebSocket()
   await rideStore.fetchActiveBooking()
+  console.log("DEBUG: Current Booking ->", rideStore.currentBooking)
 
   // Initialize map fullscreen
   map = L.map('passenger-map', { zoomControl: false }).setView([pickup.value.lat, pickup.value.lng], 15)

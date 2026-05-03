@@ -47,7 +47,7 @@ export const useRideStore = defineStore('ride', {
           console.log("WS: New booking received", data.booking)
           this.bookings.push(data.booking)
         } else if (data.type === 'ride_accepted') {
-          console.log("WS: Ride accepted by driver", data)
+          console.log("DEBUG: Ride Accepted Message Data ->", data)
           if (this.currentBooking && this.currentBooking.id === data.booking_id) {
             // Reassign the whole object to ensure Vue detects the change
             this.currentBooking = {
