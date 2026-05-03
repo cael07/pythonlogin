@@ -145,38 +145,32 @@ let lastGeocodeTime = { pickup: 0, dropoff: 0 }
 
 const reverseGeocode = async (lat, lng, type) => {
   const now = Date.now()
-  if (now - lastGeocodeTime[type] < 5000) return // Throttle to 5 seconds
+  // Only throttle if it's not the first time
+  if (lastGeocodeTime[type] > 0 && now - lastGeocodeTime[type] < 5000) return 
   lastGeocodeTime[type] = now
 
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
-      headers: {
-        'User-Agent': 'JoyRide-App-PythonLogin-V1'
-      }
+      headers: { 'User-Agent': 'JoyRide-App-PythonLogin-V1' }
     })
     
-    if (res.status === 429) {
-      console.warn("Geocoding rate limit reached (429).")
-      return
-    }
+    if (res.status === 429) return
 
     const data = await res.json()
     if (data && data.display_name) {
       const parts = data.display_name.split(',')
-      const shortAddress = parts.slice(0, 2).join(',') // First two parts for brevity
+      const shortAddress = parts.slice(0, 2).join(',')
       if (type === 'pickup') pickupText.value = shortAddress
       else dropoffText.value = shortAddress
     }
   } catch (err) {
-    console.warn("Reverse geocoding suppressed (offline or rate-limited)")
+    console.warn("Geocoding suppressed:", err)
   }
 }
 
 const onInput = (type) => {
   activeSearchType.value = type
-  if (type === 'pickup') {
-    isCurrentLocation.value = false // Stop GPS from overwriting user typing
-  }
+  if (type === 'pickup') isCurrentLocation.value = false
   const query = type === 'pickup' ? pickupText.value : dropoffText.value
   
   clearTimeout(searchTimeout)
@@ -185,10 +179,8 @@ const onInput = (type) => {
     return
   }
 
-  // Debounce API calls to prevent rate limiting
   searchTimeout = setTimeout(async () => {
     try {
-      // Limit to 5 results for dropdown
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=ph`, {
         headers: { 'User-Agent': 'JoyRide-App-PythonLogin-V1' }
       })
@@ -196,7 +188,7 @@ const onInput = (type) => {
       const data = await res.json()
       suggestions.value = data || []
     } catch (err) {
-      console.warn("Search geocoding suppressed")
+      console.warn("Search suppressed")
     }
   }, 500)
 }
@@ -626,7 +618,7 @@ watch(() => rideStore.driverLocation, (newLoc) => {
   font-size: 0.95rem;
   font-weight: 600;
   color: #222;
-  width: 100%;
+  flex: 1;
   padding: 0.25rem 0;
   outline: none;
   font-family: inherit;
