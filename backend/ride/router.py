@@ -130,6 +130,9 @@ async def accept_booking(booking_id: int, request: AcceptBooking, db: Session = 
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     
+    if booking.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Ride is already {booking.status}")
+    
     booking.driver_id = request.driver_id
     booking.status = "accepted"
     db.commit()
@@ -137,12 +140,19 @@ async def accept_booking(booking_id: int, request: AcceptBooking, db: Session = 
     driver = db.query(User).filter(User.id == request.driver_id).first()
     
     # Notify passenger that ride was accepted
-    await manager.send_personal_message(json.dumps({
+    accept_msg = json.dumps({
         "type": "ride_accepted",
         "booking_id": booking.id,
         "driver_id": request.driver_id,
         "driver_name": driver.full_name if driver else "Driver"
-    }), booking.passenger_id)
+    })
+    await manager.send_personal_message(accept_msg, booking.passenger_id)
+    
+    # Notify all other drivers to remove this from their list
+    await manager.broadcast(json.dumps({
+        "type": "booking_taken",
+        "booking_id": booking.id
+    }))
     
     return {"message": "Booking accepted"}
 
@@ -177,15 +187,15 @@ async def cancel_booking(booking_id: int, db: Session = Depends(get_db)):
     booking.status = "cancelled"
     db.commit()
     
-    # Notify both the driver (if exists) and the passenger
+    # Notify everyone that this ride is cancelled
     cancel_msg = json.dumps({
         "type": "ride_cancelled",
         "booking_id": booking.id
     })
     
-    await manager.send_personal_message(cancel_msg, booking.passenger_id)
-    if booking.driver_id:
-        await manager.send_personal_message(cancel_msg, booking.driver_id)
+    # Broadcast to all connected users (drivers and passengers)
+    # This ensures all drivers remove it from their "Incoming Requests" list
+    await manager.broadcast(cancel_msg)
         
     return {"message": "Booking cancelled"}
 

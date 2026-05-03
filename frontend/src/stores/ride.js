@@ -77,6 +77,9 @@ export const useRideStore = defineStore('ride', {
             this.driverLocation = null
           }
           this.bookings = this.bookings.filter(b => b.id !== data.booking_id)
+        } else if (data.type === 'booking_taken') {
+          // Another driver accepted the ride, remove it from my list
+          this.bookings = this.bookings.filter(b => b.id !== data.booking_id)
         }
       }
       
@@ -226,6 +229,7 @@ export const useRideStore = defineStore('ride', {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ driver_id: auth.user.id })
         })
+        const data = await res.json()
         if (res.ok) {
           // Find booking and set as current
           const booking = this.bookings.find(b => b.id === bookingId)
@@ -235,6 +239,11 @@ export const useRideStore = defineStore('ride', {
             this.currentBooking = booking
           }
           return true
+        } else {
+          // Handle case where ride is already cancelled or taken
+          alert(data.detail || "This ride is no longer available.")
+          this.bookings = this.bookings.filter(b => b.id !== bookingId)
+          return false
         }
       } catch (err) {
         console.error("Failed to accept booking:", err)
