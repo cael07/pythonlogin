@@ -11,7 +11,7 @@ from .models import User
 from .schemas import UserRegister, UserLogin
 from .utils import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 
-FACE_IMAGES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "face_images")
+FACE_IMAGES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "face_images")
 os.makedirs(FACE_IMAGES_DIR, exist_ok=True)
 
 
@@ -30,13 +30,21 @@ def get_user_by_username(db: Session, username: str):
 
 
 def get_image_base64(path: str) -> str | None:
+    if not path:
+        return None
     try:
         import base64
-        file_path = os.path.join(os.path.dirname(FACE_IMAGES_DIR), path)
+        # path is usually "face_images/filename.jpg"
+        # We want to be sure we find it in the absolute FACE_IMAGES_DIR
+        filename = os.path.basename(path)
+        file_path = os.path.join(FACE_IMAGES_DIR, filename)
+        
         if os.path.exists(file_path):
             with open(file_path, "rb") as f:
                 encoded = base64.b64encode(f.read()).decode("utf-8")
                 return f"data:image/jpeg;base64,{encoded}"
+        else:
+            print(f"WARNING: Face image file not found at {file_path}")
     except Exception as e:
         print(f"ERROR converting image to base64: {str(e)}")
     return None

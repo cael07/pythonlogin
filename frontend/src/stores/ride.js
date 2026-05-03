@@ -54,7 +54,8 @@ export const useRideStore = defineStore('ride', {
               ...this.currentBooking,
               status: 'accepted',
               driver_id: data.driver_id,
-              driver_name: data.driver_name
+              driver_name: data.driver_name,
+              driver_image: data.driver_image
             }
           }
         } else if (data.type === 'ride_arrived') {

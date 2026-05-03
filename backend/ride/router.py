@@ -4,6 +4,7 @@ import json
 from typing import Dict, List, Optional
 from ..database import get_db
 from ..auth.models import Booking, User
+from ..auth.service import get_user_by_id, get_image_base64
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/ride", tags=["Ride"])
@@ -49,13 +50,17 @@ async def get_active_booking(user_id: int, db: Session = Depends(get_db)):
     if not booking:
         return None
         
-    driver = db.query(User).filter(User.id == booking.driver_id).first() if booking.driver_id else None
+    passenger = get_user_by_id(db, booking.passenger_id)
+    driver = get_user_by_id(db, booking.driver_id) if booking.driver_id else None
     
     return {
         "id": booking.id,
         "passenger_id": booking.passenger_id,
+        "passenger_name": passenger.full_name if passenger else "Passenger",
+        "passenger_image": getattr(passenger, "face_image_base64", None),
         "driver_id": booking.driver_id,
         "driver_name": driver.full_name if driver else None,
+        "driver_image": getattr(driver, "face_image_base64", None),
         "pickup_lat": booking.pickup_lat,
         "pickup_lng": booking.pickup_lng,
         "dropoff_lat": booking.dropoff_lat,
@@ -87,12 +92,14 @@ async def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
     db.refresh(new_booking)
     
     # Broadcast to all drivers that a new booking is available
+    passenger = get_user_by_id(db, new_booking.passenger_id)
     await manager.broadcast(json.dumps({
         "type": "new_booking",
         "booking": {
             "id": new_booking.id,
             "passenger_id": new_booking.passenger_id,
-            "passenger_name": (db.query(User).filter(User.id == booking.passenger_id).first()).full_name if db.query(User).filter(User.id == booking.passenger_id).first() else "Passenger",
+            "passenger_name": passenger.full_name if passenger else "Passenger",
+            "passenger_image": getattr(passenger, "face_image_base64", None),
             "pickup_lat": new_booking.pickup_lat,
             "pickup_lng": new_booking.pickup_lng,
             "dropoff_lat": new_booking.dropoff_lat,
@@ -108,11 +115,12 @@ async def get_bookings(db: Session = Depends(get_db)):
     bookings = db.query(Booking).filter(Booking.status == "pending").all()
     results = []
     for b in bookings:
-        passenger = db.query(User).filter(User.id == b.passenger_id).first()
+        passenger = get_user_by_id(db, b.passenger_id)
         results.append({
             "id": b.id,
             "passenger_id": b.passenger_id,
             "passenger_name": passenger.full_name if passenger else "Passenger",
+            "passenger_image": getattr(passenger, "face_image_base64", None),
             "pickup_lat": b.pickup_lat,
             "pickup_lng": b.pickup_lng,
             "dropoff_lat": b.dropoff_lat,
@@ -137,14 +145,15 @@ async def accept_booking(booking_id: int, request: AcceptBooking, db: Session = 
     booking.status = "accepted"
     db.commit()
     
-    driver = db.query(User).filter(User.id == request.driver_id).first()
+    driver = get_user_by_id(db, request.driver_id)
     
     # Notify passenger that ride was accepted
     accept_msg = json.dumps({
         "type": "ride_accepted",
         "booking_id": booking.id,
         "driver_id": request.driver_id,
-        "driver_name": driver.full_name if driver else "Driver"
+        "driver_name": driver.full_name if driver else "Driver",
+        "driver_image": getattr(driver, "face_image_base64", None)
     })
     await manager.send_personal_message(accept_msg, booking.passenger_id)
     

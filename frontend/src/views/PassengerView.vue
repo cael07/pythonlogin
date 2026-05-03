@@ -90,7 +90,10 @@
             </div>
             <div v-if="rideStore.currentBooking.status === 'accepted'" class="accepted">
               <div class="driver-info">
-                <div class="driver-avatar">👨‍✈️</div>
+                <div v-if="rideStore.currentBooking.driver_image" class="driver-avatar">
+                  <img :src="rideStore.currentBooking.driver_image" class="driver-face-img" />
+                </div>
+                <div v-else class="driver-avatar">👨‍✈️</div>
                 <div>
                   <h4>{{ rideStore.currentBooking.driver_name || 'Driver' }} is on the way!</h4>
                   <p>Arriving shortly</p>
@@ -99,7 +102,10 @@
             </div>
             <div v-if="rideStore.currentBooking.status === 'arrived'" class="accepted arrived">
               <div class="driver-info highlight">
-                <div class="driver-avatar blink-fast">🛵</div>
+                <div v-if="rideStore.currentBooking.driver_image" class="driver-avatar blink-fast">
+                   <img :src="rideStore.currentBooking.driver_image" class="driver-face-img" />
+                </div>
+                <div v-else class="driver-avatar blink-fast">🛵</div>
                 <div>
                   <h4>{{ rideStore.currentBooking.driver_name || 'Driver' }} has arrived!</h4>
                   <p>Meet your driver at the pickup point</p>
@@ -592,7 +598,7 @@ watch(() => rideStore.driverLocation, async (newLoc) => {
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   flex-shrink: 0;
 }
-.header-face-img {
+.header-face-img, .driver-face-img {
   width: 100%; height: 100%;
   object-fit: cover;
   transform: scaleX(-1);

@@ -39,6 +39,13 @@
           
           <div class="requests-list">
             <div v-for="booking in rideStore.bookings" :key="booking.id" class="booking-card">
+              <div class="passenger-preview">
+                <div v-if="booking.passenger_image" class="passenger-avatar-small">
+                  <img :src="booking.passenger_image" class="passenger-face-img" />
+                </div>
+                <div v-else class="passenger-avatar-small">👤</div>
+                <span class="passenger-name-small">{{ booking.passenger_name || 'Passenger' }}</span>
+              </div>
               <div class="route-preview">
                 <div class="loc-row">
                   <span class="dot pickup-dot"></span>
@@ -61,9 +68,12 @@
           <div class="status-content">
             <div v-if="rideStore.currentBooking.status === 'accepted'" class="accepted">
               <div class="driver-info">
-                <div class="driver-avatar blink-fast">🚗</div>
+                <div v-if="rideStore.currentBooking.passenger_image" class="driver-avatar blink-fast">
+                   <img :src="rideStore.currentBooking.passenger_image" class="passenger-face-img" />
+                </div>
+                <div v-else class="driver-avatar blink-fast">🚗</div>
                 <div>
-                  <h4>Driving to passenger...</h4>
+                  <h4>Driving to {{ rideStore.currentBooking.passenger_name || 'Passenger' }}</h4>
                   <p>Location updating live</p>
                 </div>
               </div>
@@ -71,7 +81,10 @@
 
             <div v-if="rideStore.currentBooking.status === 'arrived'" class="accepted arrived">
               <div class="driver-info highlight">
-                <div class="driver-avatar">👤</div>
+                <div v-if="rideStore.currentBooking.passenger_image" class="driver-avatar">
+                   <img :src="rideStore.currentBooking.passenger_image" class="passenger-face-img" />
+                </div>
+                <div v-else class="driver-avatar">👤</div>
                 <div>
                   <h4>Arrived for {{ rideStore.currentBooking.passenger_name || 'Passenger' }}</h4>
                   <p>Waiting for passenger...</p>
@@ -422,7 +435,7 @@ const startSimulation = (booking, routePoints = null) => {
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   flex-shrink: 0;
 }
-.header-face-img {
+.header-face-img, .passenger-face-img {
   width: 100%; height: 100%;
   object-fit: cover;
   transform: scaleX(-1);
@@ -541,6 +554,30 @@ const startSimulation = (booking, routePoints = null) => {
   border: 1px solid #e0e0e0;
   border-radius: 12px;
   margin-bottom: 1rem;
+}
+
+.passenger-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.passenger-avatar-small {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: #eee;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.9rem;
+}
+
+.passenger-name-small {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #2e3192;
 }
 
 .loc-row {
