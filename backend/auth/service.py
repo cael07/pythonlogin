@@ -93,6 +93,9 @@ def register_user(
     db.commit()
     db.refresh(user)
 
+    if user.face_image_path:
+        user.face_image_base64 = get_image_base64(user.face_image_path)
+
     access_token = create_access_token({"sub": str(user.id)}, app_id)
     refresh_token = create_refresh_token({"sub": str(user.id)})
     return user, access_token, refresh_token
@@ -117,6 +120,8 @@ def login_user(
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
 
+    # Already has face_image_base64 because get_user_by_username was called
+    
     access_token = create_access_token({"sub": str(user.id)}, app_id)
     refresh_token = create_refresh_token({"sub": str(user.id)})
     return user, access_token, refresh_token

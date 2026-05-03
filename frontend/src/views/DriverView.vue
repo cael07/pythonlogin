@@ -5,14 +5,16 @@
 
     <!-- Top Overlay Elements -->
     <div class="top-overlay">
-      <button class="back-btn" @click="$router.push('/dashboard')">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-      </button>
-
       <!-- Status Card -->
       <div class="route-card glass">
-        <div class="route-header" style="display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="margin: 0;">Driver Mode</h3>
+        <div class="route-header">
+          <button class="back-btn-inline" @click="$router.push('/dashboard')">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          </button>
+          <div v-if="authStore.user?.face_image_base64" class="header-avatar">
+            <img :src="authStore.user.face_image_base64" alt="Me" class="header-face-img" />
+          </div>
+          <h3 class="flex-1">Driver Mode</h3>
           <button @click="rideStore.fetchBookings()" class="refresh-btn">
              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
           </button>
@@ -309,18 +311,36 @@ const startSimulation = (booking) => {
   pointer-events: none;
 }
 
-.back-btn {
-  pointer-events: auto;
-  background: #fff;
+.back-btn-inline {
+  background: #f3f4f6;
   border: none;
-  width: 44px; height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #333;
   cursor: pointer;
+  transition: background-color 0.2s;
 }
+.back-btn-inline:hover { background: #e5e7eb; }
+
+.header-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  flex-shrink: 0;
+}
+.header-face-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.flex-1 { flex: 1; }
 
 .route-card {
   pointer-events: auto;
@@ -330,6 +350,17 @@ const startSimulation = (booking) => {
   box-shadow: 0 8px 24px rgba(0,0,0,0.12);
   border: 1px solid rgba(0,0,0,0.05);
   color: #333;
+}
+
+.route-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.route-header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .refresh-btn {

@@ -11,6 +11,9 @@
           <button class="back-btn-inline" @click="$router.push('/dashboard')">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
           </button>
+          <div v-if="auth.user?.face_image_base64" class="header-avatar">
+            <img :src="auth.user.face_image_base64" alt="Me" class="header-face-img" />
+          </div>
           <h3>Choose route</h3>
         </div>
         
@@ -115,9 +118,11 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import L from 'leaflet'
 import { useRideStore } from '../stores/ride'
+import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 
 const rideStore = useRideStore()
+const auth = useAuthStore()
 const router = useRouter()
 let map = null
 let pickupMarker = null
@@ -516,6 +521,20 @@ watch(() => rideStore.driverLocation, (newLoc) => {
 }
 .back-btn-inline:hover {
   background: #e5e7eb;
+}
+
+.header-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  flex-shrink: 0;
+}
+.header-face-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
 }
 
 .route-header h3 {
