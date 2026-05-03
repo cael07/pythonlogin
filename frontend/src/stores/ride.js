@@ -122,6 +122,27 @@ export const useRideStore = defineStore('ride', {
       }
     },
 
+    async fetchActiveBooking() {
+      const auth = useAuthStore()
+      if (!auth.user) return
+      
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = isLocal ? 'http://localhost:8000' : this.getApiHost();
+      
+      try {
+        const res = await fetch(`${host}/ride/active/${auth.user.id}`)
+        if (res.ok) {
+          const booking = await res.json()
+          if (booking) {
+            this.currentBooking = booking
+            this.passengerLocation = { lat: booking.pickup_lat, lng: booking.pickup_lng }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch active booking:", err)
+      }
+    },
+
     async cancelBooking(bookingId) {
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       const host = isLocal ? 'http://localhost:8000' : this.getApiHost();

@@ -39,8 +39,41 @@ class BookingCreate(BaseModel):
     dropoff_lat: float
     dropoff_lng: float
 
+@router.get("/active/{user_id}")
+async def get_active_booking(user_id: int, db: Session = Depends(get_db)):
+    booking = db.query(Booking).filter(
+        Booking.passenger_id == user_id,
+        Booking.status.in_(["pending", "accepted", "arrived"])
+    ).order_by(Booking.id.desc()).first()
+    
+    if not booking:
+        return None
+        
+    driver = db.query(User).filter(User.id == booking.driver_id).first() if booking.driver_id else None
+    
+    return {
+        "id": booking.id,
+        "passenger_id": booking.passenger_id,
+        "driver_id": booking.driver_id,
+        "driver_name": driver.full_name if driver else None,
+        "pickup_lat": booking.pickup_lat,
+        "pickup_lng": booking.pickup_lng,
+        "dropoff_lat": booking.dropoff_lat,
+        "dropoff_lng": booking.dropoff_lng,
+        "status": booking.status
+    }
+
 @router.post("/bookings")
 async def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
+    # Check for existing active booking first
+    active = db.query(Booking).filter(
+        Booking.passenger_id == booking.passenger_id,
+        Booking.status.in_(["pending", "accepted", "arrived"])
+    ).first()
+    
+    if active:
+        return {"message": "Active booking exists", "booking_id": active.id, "already_exists": True}
+
     new_booking = Booking(
         passenger_id=booking.passenger_id,
         pickup_lat=booking.pickup_lat,

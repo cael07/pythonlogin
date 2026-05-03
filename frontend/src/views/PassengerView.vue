@@ -262,8 +262,9 @@ const carIcon = L.divIcon({
   iconAnchor: [20, 20]
 })
 
-onMounted(() => {
+onMounted(async () => {
   rideStore.connectWebSocket()
+  await rideStore.fetchActiveBooking()
 
   // Initialize map fullscreen
   map = L.map('passenger-map', { zoomControl: false }).setView([pickup.value.lat, pickup.value.lng], 15)
@@ -271,6 +272,18 @@ onMounted(() => {
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
   }).addTo(map)
+
+  // If there's an active booking, set the map and markers
+  if (rideStore.currentBooking) {
+    pickup.value = { lat: rideStore.currentBooking.pickup_lat, lng: rideStore.currentBooking.pickup_lng }
+    dropoff.value = { lat: rideStore.currentBooking.dropoff_lat, lng: rideStore.currentBooking.dropoff_lng }
+    updatePickupMarker()
+    dropoffMarker = L.marker([dropoff.value.lat, dropoff.value.lng], { icon: destIcon }).addTo(map)
+    map.fitBounds([
+      [pickup.value.lat, pickup.value.lng],
+      [dropoff.value.lat, dropoff.value.lng]
+    ], { padding: [50, 50] })
+  }
 
   // Start Geolocating
   if ("geolocation" in navigator) {
