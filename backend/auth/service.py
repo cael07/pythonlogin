@@ -17,15 +17,21 @@ os.makedirs(FACE_IMAGES_DIR, exist_ok=True)
 
 def get_user_by_id(db: Session, user_id: int):
     user = db.query(User).filter(User.id == user_id).first()
-    if user and user.face_image_path:
-        user.face_image_base64 = get_image_base64(user.face_image_path)
+    if user:
+        # Try disk first, then fall back to DB storage (crucial for Render/Cloud)
+        disk_img = get_image_base64(user.face_image_path) if user.face_image_path else None
+        if disk_img:
+            user.face_image_base64 = disk_img
+        # If disk failed but we have it in DB, user.face_image_base64 is already set from the query
     return user
 
 
 def get_user_by_username(db: Session, username: str):
     user = db.query(User).filter(User.username == username).first()
-    if user and user.face_image_path:
-        user.face_image_base64 = get_image_base64(user.face_image_path)
+    if user:
+        disk_img = get_image_base64(user.face_image_path) if user.face_image_path else None
+        if disk_img:
+            user.face_image_base64 = disk_img
     return user
 
 
@@ -96,12 +102,14 @@ def register_user(
         email=data.email,
         password_hash=hash_password(data.password),
         face_image_path=face_path,
+        face_image_base64=face_image_b64 # Store in DB for persistence on Render
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    if user.face_image_path:
+    # Ensure it's attached for the response
+    if not user.face_image_base64 and user.face_image_path:
         user.face_image_base64 = get_image_base64(user.face_image_path)
 
     access_token = create_access_token({"sub": str(user.id)}, app_id)

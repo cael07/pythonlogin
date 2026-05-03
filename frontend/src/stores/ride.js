@@ -12,8 +12,9 @@ export const useRideStore = defineStore('ride', {
 
   actions: {
     getApiHost() {
-      // Find the base API URL correctly using the same env var as auth
-      let base = import.meta.env.VITE_API_URL || 'https://pythonlogin-api.onrender.com';
+      // Use the actual production URL as default for Render
+      const productionHost = 'https://pythonlogin-api.onrender.com';
+      let base = import.meta.env.VITE_API_URL || productionHost;
       // If VITE_API_URL has /auth at the end, strip it
       if (base.endsWith('/auth')) {
         base = base.replace(/\/auth$/, '');

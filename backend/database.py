@@ -34,6 +34,17 @@ def init_db():
         # Base.metadata.drop_all(bind=engine)
         
         Base.metadata.create_all(bind=engine)
+        
+        # Manual migration for face_image_base64 if it doesn't exist
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("ALTER TABLE auth_users ADD COLUMN face_image_base64 TEXT"))
+                conn.commit()
+                print("DATABASE: Added face_image_base64 column to auth_users.")
+            except Exception:
+                # Column likely already exists
+                pass
+
         print("DATABASE: Tables initialized successfully.")
     except Exception as e:
         print(f"DATABASE ERROR during init: {str(e)}")

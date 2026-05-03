@@ -98,7 +98,10 @@ const biometricAvailable = ref(false)
 const fingerprintEnabled = ref(false)
 
 onMounted(async () => {
-  const host = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  // Smart host detection: if we are on render, use the render API URL
+  const isRender = window.location.hostname.includes('onrender.com')
+  const host = import.meta.env.VITE_API_URL || (isRender ? 'https://pythonlogin-api.onrender.com' : 'http://localhost:8000')
+  
   console.log("DEBUG: Current User Data ->", user.value)
   if (user.value?.username) {
     console.log("DEBUG: Direct Image Link ->", `${host}/auth/image/${user.value.username}`)
