@@ -243,35 +243,54 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
   }
 })
 
+const getDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000 // Radius of the earth in m
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
 const startSimulation = (booking) => {
+  if (animationInterval) clearInterval(animationInterval)
+  
   const targetLat = booking.pickup_lat
   const targetLng = booking.pickup_lng
   
-  const steps = 60
-  let currentStep = 0
+  // Speed: move ~25 meters every 1.5 seconds
+  const speedMetersPerStep = 25 
   
-  const latStep = (targetLat - driverLocation.value.lat) / steps
-  const lngStep = (targetLng - driverLocation.value.lng) / steps
-  
-  animationInterval = setInterval(() => {
-    currentStep++
-    driverLocation.value.lat += latStep
-    driverLocation.value.lng += lngStep
+  animationInterval = setInterval(async () => {
+    const dist = getDistance(driverLocation.value.lat, driverLocation.value.lng, targetLat, targetLng)
+    
+    // Check if arrived (within 30 meters)
+    if (dist < 30) {
+      clearInterval(animationInterval)
+      animationInterval = null
+      driverLocation.value = { lat: targetLat, lng: targetLng }
+      updateDriverMarker()
+      await rideStore.notifyArrived(booking.id)
+      return
+    }
+
+    // Move towards target
+    const ratio = speedMetersPerStep / dist
+    driverLocation.value.lat += (targetLat - driverLocation.value.lat) * ratio
+    driverLocation.value.lng += (targetLng - driverLocation.value.lng) * ratio
     
     updateDriverMarker()
     
-    // Send to websocket
-    rideStore.sendLocationUpdate(booking.id, booking.passenger_id, driverLocation.value.lat, driverLocation.value.lng)
+    // Broadcast location to passenger via WebSocket
+    rideStore.updateLocation(booking.id, driverLocation.value.lat, driverLocation.value.lng)
     
-    // Follow the car during simulation
-    map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
-
-    if (currentStep >= steps) {
-      clearInterval(animationInterval)
-      rideStore.notifyArrived(booking.id)
-      alert("Arrived at pickup location!")
+    // Keep map centered during simulation
+    if (!map.userHasMoved) {
+      map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
     }
-  }, 500)
+  }, 1500)
 }
 
 </script>
