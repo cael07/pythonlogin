@@ -5,14 +5,13 @@
 
     <!-- Top Overlay Elements -->
     <div class="top-overlay">
-      <button class="back-btn" @click="$router.push('/dashboard')">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-      </button>
-
       <!-- Routing Card -->
       <div class="route-card glass">
         <div class="route-header">
-          <h3>Your JoyRide Route</h3>
+          <button class="back-btn-inline" @click="$router.push('/dashboard')">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          </button>
+          <h3>Choose route</h3>
         </div>
         
         <div class="route-inputs">
@@ -488,17 +487,41 @@ watch(() => rideStore.driverLocation, (newLoc) => {
   pointer-events: auto;
   background: #fff;
   border-radius: 16px;
-  padding: 1.25rem;
+  padding: 1rem 1.25rem;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12);
   border: 1px solid rgba(0,0,0,0.05);
   color: #333;
   backdrop-filter: none; /* solid background for better readability over map */
 }
 
+.route-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.back-btn-inline {
+  background: #f3f4f6;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.back-btn-inline:hover {
+  background: #e5e7eb;
+}
+
 .route-header h3 {
   font-size: 1.1rem;
   font-weight: 700;
-  margin-bottom: 1rem;
+  margin: 0;
 }
 
 .route-inputs {
