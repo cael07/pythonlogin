@@ -41,13 +41,18 @@ def login(
         "user": user
     }
 
+from fastapi.security import OAuth2PasswordBearer
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
+
 @router.get("/me", response_model=UserOut)
 def get_me(
-    token: str = Depends(lambda x: x), # Simplified for brevity, usually use OAuth2PasswordBearer
+    token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-    # This is a placeholder; real implementation would extract token from header
-    pass
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = service.get_current_user_from_token(db, token)
+    return user
 
 @router.post("/refresh")
 def refresh_token(
