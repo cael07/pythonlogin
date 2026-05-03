@@ -384,7 +384,7 @@ const startSimulation = (booking) => {
   color: #333;
   height: 55vh;
   display: flex; flex-direction: column;
-  transform: translateY(calc(100% - 85px));
+  transform: translateY(calc(100% - 110px));
   transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 .bottom-sheet.expanded {
@@ -392,9 +392,10 @@ const startSimulation = (booking) => {
 }
 
 .sheet-header {
-  padding: 1.5rem 1.5rem 0.5rem 1.5rem;
+  padding: 1.25rem 1.5rem 0.75rem 1.5rem;
   cursor: pointer;
   flex-shrink: 0;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .sheet-content-wrapper {
@@ -413,7 +414,7 @@ const startSimulation = (booking) => {
 .drag-handle {
   width: 40px; height: 4px;
   background: #ddd; border-radius: 2px;
-  margin: 0 auto 1rem auto;
+  margin: 0 auto 0.75rem auto;
   flex-shrink: 0;
 }
 
@@ -423,6 +424,7 @@ const startSimulation = (booking) => {
   margin-bottom: 0;
   text-align: center;
   flex-shrink: 0;
+  color: #2e3192;
 }
 
 .requests-list {
