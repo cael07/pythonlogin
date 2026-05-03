@@ -141,9 +141,25 @@ let searchTimeout = null
 const deviceLocation = ref(null)
 const isSheetExpanded = ref(false)
 
+let lastGeocodeTime = { pickup: 0, dropoff: 0 }
+
 const reverseGeocode = async (lat, lng, type) => {
+  const now = Date.now()
+  if (now - lastGeocodeTime[type] < 5000) return // Throttle to 5 seconds
+  lastGeocodeTime[type] = now
+
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+      headers: {
+        'User-Agent': 'JoyRide-App-PythonLogin-V1'
+      }
+    })
+    
+    if (res.status === 429) {
+      console.warn("Geocoding rate limit reached (429).")
+      return
+    }
+
     const data = await res.json()
     if (data && data.display_name) {
       const parts = data.display_name.split(',')
@@ -152,7 +168,7 @@ const reverseGeocode = async (lat, lng, type) => {
       else dropoffText.value = shortAddress
     }
   } catch (err) {
-    console.error("Reverse geocoding error:", err)
+    console.warn("Reverse geocoding suppressed (offline or rate-limited)")
   }
 }
 
@@ -173,11 +189,14 @@ const onInput = (type) => {
   searchTimeout = setTimeout(async () => {
     try {
       // Limit to 5 results for dropdown
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=ph`)
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=ph`, {
+        headers: { 'User-Agent': 'JoyRide-App-PythonLogin-V1' }
+      })
+      if (res.status === 429) return
       const data = await res.json()
       suggestions.value = data || []
     } catch (err) {
-      console.error("Geocoding autocomplete error:", err)
+      console.warn("Search geocoding suppressed")
     }
   }, 500)
 }

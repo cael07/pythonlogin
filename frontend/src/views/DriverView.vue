@@ -105,16 +105,21 @@ const addressNames = ref({})
 
 const resolveAddress = async (lat, lng) => {
   try {
-    // Add a slight delay to avoid hammering nominatim if many bookings
-    await new Promise(r => setTimeout(r, 200)) 
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+    // Nominatim policy: 1 request per second max.
+    await new Promise(r => setTimeout(r, 1100)) 
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+      headers: { 'User-Agent': 'JoyRide-App-PythonLogin-V1' }
+    })
+    
+    if (res.status === 429) return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+
     const data = await res.json()
     if (data && data.display_name) {
       const parts = data.display_name.split(',')
       return parts.slice(0, 3).join(',')
     }
   } catch (err) {
-    console.error("Reverse geocoding failed", err)
+    console.warn("Reverse geocoding suppressed")
   }
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
 }
