@@ -50,11 +50,11 @@
           Ride Hailing Application
         </h3>
         <p class="token-desc" style="margin-bottom: 1rem;">Choose your mode to continue:</p>
-        <div style="display: flex; gap: 1rem;">
-          <button class="btn btn-primary" style="flex: 1" @click="$router.push('/passenger')">
+        <div class="mode-actions">
+          <button class="btn btn-primary" @click="$router.push('/passenger')">
             Enter Passenger Mode
           </button>
-          <button class="btn btn-primary" style="flex: 1; background: #27ae60" @click="$router.push('/driver')">
+          <button class="btn btn-primary btn-driver" @click="$router.push('/driver')">
             Enter Driver Mode
           </button>
         </div>
@@ -296,6 +296,17 @@ function handleLogout() {
 
 .token-desc { font-size: 0.85rem; color: var(--text-2); margin-bottom: 0.5rem; }
 
+.mode-actions {
+  display: flex;
+  gap: 1rem;
+}
+.mode-actions .btn {
+  flex: 1;
+}
+.btn-driver {
+  background: #27ae60 !important;
+}
+
 .code-block {
   background: rgba(0,0,0,0.4);
   border: 1px solid var(--border);
@@ -305,6 +316,8 @@ function handleLogout() {
   font-size: 0.82rem;
   color: #a5b4fc;
   overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 .hl { color: var(--success); }
 
@@ -319,4 +332,37 @@ function handleLogout() {
 }
 .dash-footer a { color: var(--primary-light); text-decoration: none; }
 .dash-footer a:hover { color: var(--text-1); }
+
+@media (max-width: 640px) {
+  .dash-wrap {
+    padding: 1.5rem;
+    gap: 1rem;
+  }
+  .dash-header {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  .logout-btn {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
+  }
+  .mode-actions {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .user-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.25rem;
+  }
+  .user-avatar, .user-face-container {
+    width: 64px; height: 64px;
+  }
+  .user-info {
+    align-items: center;
+  }
+  .dash-title {
+    font-size: 1.2rem;
+  }
+}
 </style>
