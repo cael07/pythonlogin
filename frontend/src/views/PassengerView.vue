@@ -99,7 +99,7 @@
               <div class="driver-info highlight">
                 <div class="driver-avatar blink-fast">🛵</div>
                 <div>
-                  <h4>Driver has arrived!</h4>
+                  <h4>{{ rideStore.currentBooking.driver_name || 'Driver' }} has arrived!</h4>
                   <p>Meet your driver at the pickup point</p>
                 </div>
               </div>

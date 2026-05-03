@@ -57,12 +57,22 @@
 
         <div v-else class="status-panel">
           <div class="status-content">
-            <div class="accepted">
+            <div v-if="rideStore.currentBooking.status === 'accepted'" class="accepted">
               <div class="driver-info">
                 <div class="driver-avatar blink-fast">🚗</div>
                 <div>
                   <h4>Driving to passenger...</h4>
                   <p>Location updating live</p>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="rideStore.currentBooking.status === 'arrived'" class="accepted arrived">
+              <div class="driver-info highlight">
+                <div class="driver-avatar">👤</div>
+                <div>
+                  <h4>Arrived at Pickup</h4>
+                  <p>Waiting for passenger...</p>
                 </div>
               </div>
             </div>
@@ -446,6 +456,10 @@ const startSimulation = (booking) => {
 .driver-info {
   display: flex; align-items: center; justify-content: center; gap: 1rem;
   background: #f8f9fa; padding: 1rem; border-radius: 12px;
+}
+.driver-info.highlight {
+  background: #ebf8ff;
+  border: 2px solid #3498db;
 }
 .driver-avatar {
   font-size: 2rem; background: #fff;
