@@ -59,6 +59,7 @@ async def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
         "booking": {
             "id": new_booking.id,
             "passenger_id": new_booking.passenger_id,
+            "passenger_name": (db.query(User).filter(User.id == booking.passenger_id).first()).full_name if db.query(User).filter(User.id == booking.passenger_id).first() else "Passenger",
             "pickup_lat": new_booking.pickup_lat,
             "pickup_lng": new_booking.pickup_lng,
             "dropoff_lat": new_booking.dropoff_lat,
@@ -72,7 +73,20 @@ async def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
 @router.get("/bookings")
 async def get_bookings(db: Session = Depends(get_db)):
     bookings = db.query(Booking).filter(Booking.status == "pending").all()
-    return bookings
+    results = []
+    for b in bookings:
+        passenger = db.query(User).filter(User.id == b.passenger_id).first()
+        results.append({
+            "id": b.id,
+            "passenger_id": b.passenger_id,
+            "passenger_name": passenger.full_name if passenger else "Passenger",
+            "pickup_lat": b.pickup_lat,
+            "pickup_lng": b.pickup_lng,
+            "dropoff_lat": b.dropoff_lat,
+            "dropoff_lng": b.dropoff_lng,
+            "status": b.status
+        })
+    return results
 
 class AcceptBooking(BaseModel):
     driver_id: int

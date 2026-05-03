@@ -71,7 +71,7 @@
               <div class="driver-info highlight">
                 <div class="driver-avatar">👤</div>
                 <div>
-                  <h4>Arrived at Pickup</h4>
+                  <h4>Arrived for {{ rideStore.currentBooking.passenger_name || 'Passenger' }}</h4>
                   <p>Waiting for passenger...</p>
                 </div>
               </div>
