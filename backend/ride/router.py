@@ -109,12 +109,17 @@ async def notify_arrived(booking_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     # Notify passenger
-    await manager.send_personal_message(json.dumps({
+    msg = json.dumps({
         "type": "ride_arrived",
         "booking_id": booking.id
-    }), booking.passenger_id)
+    })
+    await manager.send_personal_message(msg, booking.passenger_id)
     
-    return {"message": "Passenger notified of arrival"}
+    # Notify driver too so their UI updates
+    if booking.driver_id:
+        await manager.send_personal_message(msg, booking.driver_id)
+        
+    return {"message": "Arrival notification sent to all parties"}
 
 @router.post("/bookings/{booking_id}/cancel")
 async def cancel_booking(booking_id: int, db: Session = Depends(get_db)):
