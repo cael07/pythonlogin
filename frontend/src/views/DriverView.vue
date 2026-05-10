@@ -169,7 +169,8 @@ const userIcon = L.divIcon({
 
 onMounted(async () => {
   rideStore.connectWebSocket()
-  await rideStore.fetchBookings()
+  await rideStore.fetchActiveBooking() // Fetch if already in a ride
+  await rideStore.fetchBookings()      // Fetch new requests
 
   map = L.map('driver-map', { zoomControl: false }).setView([driverLocation.value.lat, driverLocation.value.lng], 15)
   
@@ -253,6 +254,9 @@ const drawRouteLine = (points) => {
 const acceptRide = async (booking) => {
   const success = await rideStore.acceptBooking(booking.id)
   if (success) {
+    // Send initial location immediately so passenger sees icon right away
+    rideStore.updateLocation(booking.id, driverLocation.value.lat, driverLocation.value.lng)
+
     // Show passenger pickup
     passengerMarker = L.marker([booking.pickup_lat, booking.pickup_lng], { icon: userIcon }).addTo(map)
       

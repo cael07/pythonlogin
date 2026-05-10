@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException
 from sqlalchemy.orm import Session
+import sqlalchemy as sa
 import json
 from typing import Dict, List, Optional
 from ..database import get_db
@@ -43,7 +44,10 @@ class BookingCreate(BaseModel):
 @router.get("/active/{user_id}")
 async def get_active_booking(user_id: int, db: Session = Depends(get_db)):
     booking = db.query(Booking).filter(
-        Booking.passenger_id == user_id,
+        sa.or_(
+            Booking.passenger_id == user_id,
+            Booking.driver_id == user_id
+        ),
         Booking.status.in_(["pending", "accepted", "arrived"])
     ).order_by(Booking.id.desc()).first()
     

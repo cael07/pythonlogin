@@ -266,8 +266,8 @@ const destIcon = L.divIcon({
 const carIcon = L.divIcon({
   className: 'custom-map-marker',
   html: `<div class="marker-pin car-pin">🛵</div>`,
-  iconSize: [40, 40],
-  iconAnchor: [20, 20]
+  iconSize: [44, 44],
+  iconAnchor: [22, 22]
 })
 
 onMounted(async () => {
@@ -295,8 +295,17 @@ onMounted(async () => {
         [dropoff.value.lat, dropoff.value.lng]
       ], { padding: [50, 50] })
     } else {
-      // Accepted or Arrived: focus on pickup, driverLocation watcher will handle the rest
+      // Accepted or Arrived: focus on pickup
       map.setView([pickup.value.lat, pickup.value.lng], 15)
+      
+      // If we already have driver location, show it
+      if (rideStore.driverLocation) {
+        if (driverMarker) map.removeLayer(driverMarker)
+        driverMarker = L.marker([rideStore.driverLocation.lat, rideStore.driverLocation.lng], { icon: carIcon, zIndexOffset: 1000 }).addTo(map)
+        
+        const bounds = L.latLngBounds([pickup.value.lat, pickup.value.lng], [rideStore.driverLocation.lat, rideStore.driverLocation.lng])
+        map.fitBounds(bounds, { padding: [100, 100] })
+      }
     }
   }
 
@@ -473,10 +482,10 @@ const drawRouteLine = (points) => {
 
 // Watch for driver location updates
 watch(() => rideStore.driverLocation, async (newLoc) => {
-  if (!newLoc) return
+  if (!newLoc || !map) return
   
   if (!driverMarker) {
-    driverMarker = L.marker([newLoc.lat, newLoc.lng], { icon: carIcon }).addTo(map)
+    driverMarker = L.marker([newLoc.lat, newLoc.lng], { icon: carIcon, zIndexOffset: 1000 }).addTo(map)
   } else {
     driverMarker.setLatLng([newLoc.lat, newLoc.lng])
   }
@@ -538,7 +547,7 @@ watch(() => rideStore.driverLocation, async (newLoc) => {
 }
 :deep(.pickup-pin) { background: #3498db; }
 :deep(.dropoff-pin) { background: #9b59b6; }
-:deep(.car-pin) { background: #fff; border: 2px solid #2ecc71; }
+:deep(.car-pin) { background: #2ecc71; border: 2px solid #fff; color: #fff; }
 
 :deep(.marker-pulse) {
   position: absolute;
