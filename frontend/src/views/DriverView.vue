@@ -150,7 +150,7 @@ let driverMarker = null
 let passengerMarker = null
 let heartbeatInterval = null
 let watchId = null
-let routeLine = null
+let routeLayer = null
 const routePoints = ref([])
 let lastBearing = 0
 
@@ -341,25 +341,29 @@ const fetchRoute = async (start, end) => {
 }
 
 const drawRouteLine = (points) => {
-  if (routeLine) map.removeLayer(routeLine)
+  if (routeLayer) map.removeLayer(routeLayer)
   routePoints.value = points
   const latLngs = points.map(p => [p.lat, p.lng])
-  routeLine = L.polyline(latLngs, {
+  
+  routeLayer = L.layerGroup().addTo(map)
+  
+  // Base thick line
+  L.polyline(latLngs, {
     color: '#2e3192',
-    weight: 10, // Wider
+    weight: 10,
     opacity: 0.9,
     lineJoin: 'round',
     lineCap: 'round'
-  }).addTo(map)
+  }).addTo(routeLayer)
   
-  // Add a slightly lighter center line for a "premium" look
+  // Center highlight line
   L.polyline(latLngs, {
     color: '#4f46e5',
     weight: 4,
     opacity: 1,
     lineJoin: 'round',
     lineCap: 'round'
-  }).addTo(map)
+  }).addTo(routeLayer)
 }
 
 const acceptRide = async (booking) => {
@@ -447,9 +451,13 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
       map.removeLayer(passengerMarker)
       passengerMarker = null
     }
-    if (routeLine) {
-      map.removeLayer(routeLine)
-      routeLine = null
+    if (routeLayer) {
+      map.removeLayer(routeLayer)
+      routeLayer = null
+    }
+    // Reset map perspective for next ride
+    if (map) {
+      map.setZoom(15)
     }
     // If it was cancelled by someone else, notify
     if (oldVal.status !== 'completed' && oldVal.status !== 'cancelled') {
