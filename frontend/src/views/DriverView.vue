@@ -396,9 +396,6 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   return R * c
 }
 
-  return R * c
-}
-
 </script>
 
 <style scoped>
