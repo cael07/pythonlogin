@@ -426,13 +426,19 @@ const onStartRide = async () => {
     const points = await fetchRoute(driverLocation.value, { lat: booking.dropoff_lat, lng: booking.dropoff_lng })
     if (points) {
       drawRouteLine(points)
-      const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]))
-      map.flyToBounds(bounds, { padding: [50, 50], animate: true })
       
-      // Zoom in closer for navigation
-      setTimeout(() => {
-        map.setZoom(18)
-      }, 1000)
+      // Instead of flyToBounds (which zooms out), stay centered on driver
+      // The watchPosition logic will handle the orientation and bottom-centering
+      map.setZoom(18)
+      
+      // Force an immediate orientation toward the first point of the route
+      if (points.length > 1) {
+        lastBearing = getBearing(driverLocation.value.lat, driverLocation.value.lng, points[1].lat, points[1].lng)
+        const mapEl = document.querySelector('.map-container')
+        if (mapEl) {
+          mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
+        }
+      }
     }
   }
 }
@@ -524,7 +530,9 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   height: 200%;
   z-index: 1;
   background: #e5e7eb;
+  /* Flat top-view with Heading Up rotation */
   transform: rotateZ(var(--map-rotation, 0deg));
+  transform-origin: center center; /* Default center rotation */
   transition: transform 0.5s ease-out;
 }
 
