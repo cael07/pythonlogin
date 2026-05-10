@@ -152,7 +152,6 @@ let heartbeatInterval = null
 let watchId = null
 let routeLayer = null
 const routePoints = ref([])
-let lastBearing = 0
 
 const isSheetExpanded = ref(false)
 const addressNames = ref({})
@@ -176,17 +175,6 @@ const resolveAddress = async (lat, lng) => {
     console.warn("Reverse geocoding suppressed")
   }
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-}
-
-const getBearing = (startLat, startLng, destLat, destLng) => {
-  const toRad = (v) => v * Math.PI / 180
-  const toDeg = (v) => v * 180 / Math.PI
-  
-  const y = Math.sin(toRad(destLng - startLng)) * Math.cos(toRad(destLat))
-  const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
-            Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLng - startLng))
-  const brng = toDeg(Math.atan2(y, x))
-  return (brng + 360) % 360
 }
 
 watch(() => rideStore.bookings, async (newBookings) => {
@@ -237,45 +225,15 @@ onMounted(async () => {
           lat: position.coords.latitude,
           lng: position.coords.longitude
         }
-        
-        // Calculate bearing for rotation
-        if (driverLocation.value) {
-          const bearing = getBearing(driverLocation.value.lat, driverLocation.value.lng, newLoc.lat, newLoc.lng)
-          if (getDistance(driverLocation.value.lat, driverLocation.value.lng, newLoc.lat, newLoc.lng) > 2) {
-             lastBearing = bearing
-          }
-        }
-
         driverLocation.value = newLoc
         updateDriverMarker()
         
-        // Update map orientation
-        if (map && !map.userHasMoved && rideStore.currentBooking) {
-          const mapEl = document.querySelector('.map-container')
-          if (mapEl) {
-            mapEl.classList.add('nav-mode')
-            mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
-          }
-        } else if (map && !rideStore.currentBooking) {
-          const mapEl = document.querySelector('.map-container')
-          if (mapEl) {
-            mapEl.classList.remove('nav-mode')
-            mapEl.style.setProperty('--map-rotation', `0deg`)
-          }
-        }
-
         // Send live GPS update if in a ride
         if (rideStore.currentBooking) {
           rideStore.updateLocation(rideStore.currentBooking.id, driverLocation.value.lat, driverLocation.value.lng)
           
-          // Navigation view logic: keep icon above bottom sheet
           if (!map.userHasMoved) {
-            const zoom = map.getZoom()
-            const centerPoint = map.project([driverLocation.value.lat, driverLocation.value.lng], zoom)
-            // Shift the center "up" to push icon to visible area above sheet
-            const targetPoint = L.point(centerPoint.x, centerPoint.y - (map.getSize().y * 0.15))
-            const targetLatLng = map.unproject(targetPoint, zoom)
-            map.panTo(targetLatLng, { animate: true, duration: 0.5 })
+            map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
           }
 
           // Rerouting check
@@ -332,14 +290,11 @@ const updateDriverMarker = () => {
     driverMarker.setLatLng([driverLocation.value.lat, driverLocation.value.lng])
   }
   
-  // Apply rotation to the marker element
   const el = driverMarker.getElement()
   if (el) {
     const pin = el.querySelector('.marker-pin')
     if (pin) {
-      // In heading-up mode, the marker should always face UP relative to the rotated map
-      // so we counter-rotate it to stay straight
-      pin.style.transform = `rotate(${lastBearing}deg)`
+      pin.style.transform = `none`
     }
   }
 }
@@ -424,16 +379,6 @@ const onStartRide = async () => {
       drawRouteLine(points)
       const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]))
       map.flyToBounds(bounds, { padding: [50, 50], animate: true })
-      
-      // Set initial bearing toward first point
-      if (points.length > 1) {
-        lastBearing = getBearing(driverLocation.value.lat, driverLocation.value.lng, points[1].lat, points[1].lng)
-        const mapEl = document.querySelector('.map-container')
-        if (mapEl) {
-          mapEl.classList.add('nav-mode')
-          mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
-        }
-      }
     }
   }
 }
@@ -524,13 +469,6 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   height: 100%;
   z-index: 1;
   background: #e5e7eb;
-  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.map-container.nav-mode {
-  /* Google Maps Style: 3D perspective and dynamic rotation */
-  transform: perspective(1000px) rotateX(50deg) rotateZ(var(--map-rotation, 0deg));
-  transform-origin: center 80%;
 }
 
 :deep(.custom-map-marker) { background: transparent; border: none; }
