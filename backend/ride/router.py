@@ -214,12 +214,12 @@ async def start_ride(booking_id: int, db: Session = Depends(get_db)):
     booking.status = "started"
     db.commit()
     
-    # Notify passenger
-    msg = json.dumps({
-        "type": "ride_started",
-        "booking_id": booking.id
-    })
     await manager.send_personal_message(msg, booking.passenger_id)
+    
+    # Notify driver
+    if booking.driver_id:
+        await manager.send_personal_message(msg, booking.driver_id)
+        
     return {"message": "Ride started"}
 
 @router.post("/bookings/{booking_id}/complete")
@@ -231,12 +231,12 @@ async def complete_ride(booking_id: int, db: Session = Depends(get_db)):
     booking.status = "completed"
     db.commit()
     
-    # Notify passenger
-    msg = json.dumps({
-        "type": "ride_completed",
-        "booking_id": booking.id
-    })
     await manager.send_personal_message(msg, booking.passenger_id)
+
+    # Notify driver
+    if booking.driver_id:
+        await manager.send_personal_message(msg, booking.driver_id)
+        
     return {"message": "Ride completed"}
 
 @router.post("/bookings/{booking_id}/cancel")

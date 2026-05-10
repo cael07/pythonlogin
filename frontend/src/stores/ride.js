@@ -140,9 +140,12 @@ export const useRideStore = defineStore('ride', {
       const host = isLocal ? 'http://localhost:8000' : this.getApiHost();
       
       try {
-        await fetch(`${host}/ride/bookings/${bookingId}/arrived`, {
+        const res = await fetch(`${host}/ride/bookings/${bookingId}/arrived`, {
           method: 'POST'
         })
+        if (res.ok && this.currentBooking) {
+          this.currentBooking.status = 'arrived'
+        }
       } catch (err) {
         console.error("Failed to notify arrival:", err)
       }
