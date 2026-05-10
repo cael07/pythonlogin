@@ -287,11 +287,17 @@ onMounted(async () => {
     pickup.value = { lat: rideStore.currentBooking.pickup_lat, lng: rideStore.currentBooking.pickup_lng }
     dropoff.value = { lat: rideStore.currentBooking.dropoff_lat, lng: rideStore.currentBooking.dropoff_lng }
     updatePickupMarker()
-    dropoffMarker = L.marker([dropoff.value.lat, dropoff.value.lng], { icon: destIcon }).addTo(map)
-    map.fitBounds([
-      [pickup.value.lat, pickup.value.lng],
-      [dropoff.value.lat, dropoff.value.lng]
-    ], { padding: [50, 50] })
+    
+    if (rideStore.currentBooking.status === 'pending') {
+      dropoffMarker = L.marker([dropoff.value.lat, dropoff.value.lng], { icon: destIcon }).addTo(map)
+      map.fitBounds([
+        [pickup.value.lat, pickup.value.lng],
+        [dropoff.value.lat, dropoff.value.lng]
+      ], { padding: [50, 50] })
+    } else {
+      // Accepted or Arrived: focus on pickup, driverLocation watcher will handle the rest
+      map.setView([pickup.value.lat, pickup.value.lng], 15)
+    }
   }
 
   // Start Geolocating
@@ -398,7 +404,7 @@ const cancelRide = async () => {
   }
 }
 
-// Watch for ride cancellation cleanup
+// Watch for ride status changes
 watch(() => rideStore.currentBooking, (newVal, oldVal) => {
   if (!newVal && oldVal) {
     // Ride was cancelled or ended
@@ -410,12 +416,35 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
       map.removeLayer(routeLine)
       routeLine = null
     }
+    
+    // Restore dropoff marker if it was removed during the ride
+    if (dropoff.value && !dropoffMarker) {
+      dropoffMarker = L.marker([dropoff.value.lat, dropoff.value.lng], { icon: destIcon }).addTo(map)
+    }
+
     // If it was cancelled by someone else, notify
-    if (oldVal.status !== 'completed') {
+    if (oldVal.status !== 'completed' && oldVal.status !== 'cancelled') {
        alert("Ride has been cancelled.")
     }
+  } else if (newVal && oldVal && newVal.status !== oldVal.status) {
+    // Status changed
+    if (newVal.status === 'accepted' || newVal.status === 'arrived') {
+      // Remove destination marker when driver is coming
+      if (dropoffMarker) {
+        map.removeLayer(dropoffMarker)
+        dropoffMarker = null
+      }
+      // If we have driver location, zoom to show both
+      if (rideStore.driverLocation) {
+        const bounds = L.latLngBounds([pickup.value.lat, pickup.value.lng], [rideStore.driverLocation.lat, rideStore.driverLocation.lng])
+        map.flyToBounds(bounds, { padding: [100, 100], animate: true })
+      } else {
+        // Just focus on pickup for now
+        map.flyTo([pickup.value.lat, pickup.value.lng], 15)
+      }
+    }
   }
-})
+}, { deep: true })
 
 const fetchRoute = async (start, end) => {
   try {

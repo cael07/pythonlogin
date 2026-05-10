@@ -110,6 +110,11 @@ export const useRideStore = defineStore('ride', {
       }
     },
 
+    updateLocation(bookingId, lat, lng) {
+      if (!this.currentBooking) return
+      this.sendLocationUpdate(bookingId, this.currentBooking.passenger_id, lat, lng)
+    },
+
     dismissBooking(bookingId) {
       this.bookings = this.bookings.filter(b => b.id !== bookingId)
     },
