@@ -148,7 +148,6 @@ const authStore = useAuthStore()
 let map = null
 let driverMarker = null
 let passengerMarker = null
-let animationInterval = null
 let heartbeatInterval = null
 let watchId = null
 let routeLine = null
@@ -226,10 +225,25 @@ onMounted(async () => {
           lng: position.coords.longitude
         }
         updateDriverMarker()
+        
         // Send live GPS update if in a ride
         if (rideStore.currentBooking) {
           rideStore.updateLocation(rideStore.currentBooking.id, driverLocation.value.lat, driverLocation.value.lng)
+          
+          // Auto-arrival check based on real GPS
+          if (rideStore.currentBooking.status === 'accepted') {
+            const dist = getDistance(
+              driverLocation.value.lat, 
+              driverLocation.value.lng, 
+              rideStore.currentBooking.pickup_lat, 
+              rideStore.currentBooking.pickup_lng
+            )
+            if (dist < 50) { // Within 50 meters
+              rideStore.notifyArrived(rideStore.currentBooking.id)
+            }
+          }
         }
+
         if (!map.userHasMoved && !rideStore.currentBooking) {
           map.setView([driverLocation.value.lat, driverLocation.value.lng], 15)
         }
@@ -256,7 +270,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (map) map.remove()
-  if (animationInterval) clearInterval(animationInterval)
   if (heartbeatInterval) clearInterval(heartbeatInterval)
   if (watchId && navigator.geolocation) navigator.geolocation.clearWatch(watchId)
 })
@@ -319,12 +332,10 @@ const acceptRide = async (booking) => {
       // Re-center map to show the whole route
       const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]))
       map.flyToBounds(bounds, { padding: [50, 50], animate: true })
-      startSimulation(booking, points)
     } else {
       // Fallback to straight line
       const bounds = L.latLngBounds([driverLocation.value.lat, driverLocation.value.lng], [booking.pickup_lat, booking.pickup_lng])
       map.flyToBounds(bounds, { padding: [50, 50], animate: true })
-      startSimulation(booking)
     }
   }
 }
@@ -345,10 +356,6 @@ const onStartRide = async () => {
       drawRouteLine(points)
       const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]))
       map.flyToBounds(bounds, { padding: [50, 50], animate: true })
-      startSimulation(booking, points, true) // pass true to indicate to destination
-    } else {
-      // Fallback
-      startSimulation(booking, null, true)
     }
   }
 }
@@ -371,10 +378,6 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
       map.removeLayer(routeLine)
       routeLine = null
     }
-    if (animationInterval) {
-      clearInterval(animationInterval)
-      animationInterval = null
-    }
     // If it was cancelled by someone else, notify
     if (oldVal.status !== 'completed') {
        alert("Ride has been cancelled.")
@@ -393,79 +396,7 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   return R * c
 }
 
-const startSimulation = (booking, routePoints = null, toDestination = false) => {
-  if (animationInterval) clearInterval(animationInterval)
-  
-  const targetLat = toDestination ? booking.dropoff_lat : booking.pickup_lat
-  const targetLng = toDestination ? booking.dropoff_lng : booking.pickup_lng
-  const activeStatus = toDestination ? 'started' : 'accepted'
-  
-  if (routePoints) {
-    let currentStep = 0
-    animationInterval = setInterval(async () => {
-      // If status changed, stop simulation
-      if (rideStore.currentBooking?.status !== activeStatus) {
-        clearInterval(animationInterval)
-        animationInterval = null
-        return
-      }
-
-      if (currentStep >= routePoints.length) {
-        clearInterval(animationInterval)
-        animationInterval = null
-        if (!toDestination) {
-          await rideStore.notifyArrived(booking.id)
-        }
-        if (routeLine) map.removeLayer(routeLine)
-        return
-      }
-
-      driverLocation.value = routePoints[currentStep]
-      updateDriverMarker()
-      
-      // Update route line to show remaining path
-      if (routeLine) {
-        routeLine.setLatLngs(routePoints.slice(currentStep).map(p => [p.lat, p.lng]))
-      }
-
-      rideStore.updateLocation(booking.id, driverLocation.value.lat, driverLocation.value.lng)
-      if (!map.userHasMoved) {
-        map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
-      }
-      currentStep++
-    }, 1000)
-  } else {
-    // Fallback: Straight line simulation
-    const speedMetersPerStep = 25 
-    animationInterval = setInterval(async () => {
-      // If status changed, stop simulation
-      if (rideStore.currentBooking?.status !== activeStatus) {
-        clearInterval(animationInterval)
-        animationInterval = null
-        return
-      }
-
-      const dist = getDistance(driverLocation.value.lat, driverLocation.value.lng, targetLat, targetLng)
-      if (dist < 30) {
-        clearInterval(animationInterval)
-        animationInterval = null
-        driverLocation.value = { lat: targetLat, lng: targetLng }
-        updateDriverMarker()
-        if (!toDestination) {
-           await rideStore.notifyArrived(booking.id)
-        }
-        return
-      }
-      const ratio = speedMetersPerStep / dist
-      driverLocation.value.lat += (targetLat - driverLocation.value.lat) * ratio
-      driverLocation.value.lng += (targetLng - driverLocation.value.lng) * ratio
-      updateDriverMarker()
-      rideStore.updateLocation(booking.id, driverLocation.value.lat, driverLocation.value.lng)
-      if (!map.userHasMoved) {
-        map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
-      }
-    }, 1500)
-  }
+  return R * c
 }
 
 </script>
