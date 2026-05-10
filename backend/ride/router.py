@@ -167,7 +167,21 @@ async def accept_booking(booking_id: int, request: AcceptBooking, db: Session = 
         "booking_id": booking.id
     }))
     
-    return {"message": "Booking accepted"}
+    passenger = get_user_by_id(db, booking.passenger_id)
+    return {
+        "message": "Booking accepted",
+        "booking": {
+            "id": booking.id,
+            "passenger_id": booking.passenger_id,
+            "passenger_name": passenger.full_name if passenger else "Passenger",
+            "passenger_image": getattr(passenger, "face_image_base64", None),
+            "pickup_lat": booking.pickup_lat,
+            "pickup_lng": booking.pickup_lng,
+            "dropoff_lat": booking.dropoff_lat,
+            "dropoff_lng": booking.dropoff_lng,
+            "status": booking.status
+        }
+    }
 
 @router.post("/bookings/{booking_id}/arrived")
 async def notify_arrived(booking_id: int, db: Session = Depends(get_db)):

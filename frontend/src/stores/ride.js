@@ -253,13 +253,7 @@ export const useRideStore = defineStore('ride', {
         })
         const data = await res.json()
         if (res.ok) {
-          // Find booking and set as current
-          const booking = this.bookings.find(b => b.id === bookingId)
-          if (booking) {
-            booking.status = 'accepted'
-            booking.driver_id = auth.user.id
-            this.currentBooking = booking
-          }
+          this.currentBooking = data.booking
           return true
         } else {
           // Handle case where ride is already cancelled or taken
