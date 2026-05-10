@@ -152,6 +152,7 @@ let heartbeatInterval = null
 let watchId = null
 let routeLayer = null
 const routePoints = ref([])
+let lastBearing = 0
 
 const isSheetExpanded = ref(false)
 const addressNames = ref({})
@@ -175,6 +176,17 @@ const resolveAddress = async (lat, lng) => {
     console.warn("Reverse geocoding suppressed")
   }
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+}
+
+const getBearing = (startLat, startLng, destLat, destLng) => {
+  const toRad = (v) => v * Math.PI / 180
+  const toDeg = (v) => v * 180 / Math.PI
+  
+  const y = Math.sin(toRad(destLng - startLng)) * Math.cos(toRad(destLat))
+  const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
+            Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLng - startLng))
+  const brng = toDeg(Math.atan2(y, x))
+  return (brng + 360) % 360
 }
 
 watch(() => rideStore.bookings, async (newBookings) => {
@@ -225,15 +237,36 @@ onMounted(async () => {
           lat: position.coords.latitude,
           lng: position.coords.longitude
         }
+        
+        // Calculate bearing for rotation
+        if (driverLocation.value) {
+          const bearing = getBearing(driverLocation.value.lat, driverLocation.value.lng, newLoc.lat, newLoc.lng)
+          if (getDistance(driverLocation.value.lat, driverLocation.value.lng, newLoc.lat, newLoc.lng) > 2) {
+             lastBearing = bearing
+          }
+        }
+
         driverLocation.value = newLoc
         updateDriverMarker()
         
+        // Update map orientation
+        if (map && !map.userHasMoved && rideStore.currentBooking) {
+          const mapEl = document.querySelector('.map-container')
+          if (mapEl) {
+            mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
+          }
+        }
+
         // Send live GPS update if in a ride
         if (rideStore.currentBooking) {
           rideStore.updateLocation(rideStore.currentBooking.id, driverLocation.value.lat, driverLocation.value.lng)
           
           if (!map.userHasMoved) {
-            map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
+             // Zoom in closer for navigation
+             const currentZoom = map.getZoom()
+             if (currentZoom < 17) map.setZoom(18)
+             
+             map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
           }
 
           // Rerouting check
@@ -294,7 +327,8 @@ const updateDriverMarker = () => {
   if (el) {
     const pin = el.querySelector('.marker-pin')
     if (pin) {
-      pin.style.transform = `none`
+      // Icon stays straight (pointing UP) while map rotates around it
+      pin.style.transform = `rotate(${lastBearing}deg)`
     }
   }
 }
@@ -379,6 +413,11 @@ const onStartRide = async () => {
       drawRouteLine(points)
       const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]))
       map.flyToBounds(bounds, { padding: [50, 50], animate: true })
+      
+      // Zoom in closer for navigation
+      setTimeout(() => {
+        map.setZoom(18)
+      }, 1000)
     }
   }
 }
@@ -463,12 +502,15 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
 
 .map-container {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  /* Make container larger to prevent white gaps during rotation */
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
   z-index: 1;
   background: #e5e7eb;
+  transform: rotateZ(var(--map-rotation, 0deg));
+  transition: transform 0.5s ease-out;
 }
 
 :deep(.custom-map-marker) { background: transparent; border: none; }
