@@ -249,6 +249,21 @@ onMounted(async () => {
         driverLocation.value = newLoc
         updateDriverMarker()
         
+        // Update map orientation
+        if (map && !map.userHasMoved && rideStore.currentBooking) {
+          const mapEl = document.querySelector('.map-container')
+          if (mapEl) {
+            mapEl.classList.add('nav-mode')
+            mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
+          }
+        } else if (map && !rideStore.currentBooking) {
+          const mapEl = document.querySelector('.map-container')
+          if (mapEl) {
+            mapEl.classList.remove('nav-mode')
+            mapEl.style.setProperty('--map-rotation', `0deg`)
+          }
+        }
+
         // Send live GPS update if in a ride
         if (rideStore.currentBooking) {
           rideStore.updateLocation(rideStore.currentBooking.id, driverLocation.value.lat, driverLocation.value.lng)
@@ -322,6 +337,8 @@ const updateDriverMarker = () => {
   if (el) {
     const pin = el.querySelector('.marker-pin')
     if (pin) {
+      // In heading-up mode, the marker should always face UP relative to the rotated map
+      // so we counter-rotate it to stay straight
       pin.style.transform = `rotate(${lastBearing}deg)`
     }
   }
@@ -407,6 +424,16 @@ const onStartRide = async () => {
       drawRouteLine(points)
       const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]))
       map.flyToBounds(bounds, { padding: [50, 50], animate: true })
+      
+      // Set initial bearing toward first point
+      if (points.length > 1) {
+        lastBearing = getBearing(driverLocation.value.lat, driverLocation.value.lng, points[1].lat, points[1].lng)
+        const mapEl = document.querySelector('.map-container')
+        if (mapEl) {
+          mapEl.classList.add('nav-mode')
+          mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
+        }
+      }
     }
   }
 }
@@ -496,8 +523,14 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   width: 100%;
   height: 100%;
   z-index: 1;
-  transform: perspective(1000px) rotateX(15deg);
-  transform-origin: bottom;
+  background: #e5e7eb;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.map-container.nav-mode {
+  /* Google Maps Style: 3D perspective and dynamic rotation */
+  transform: perspective(1000px) rotateX(50deg) rotateZ(var(--map-rotation, 0deg));
+  transform-origin: center 80%;
 }
 
 :deep(.custom-map-marker) { background: transparent; border: none; }
