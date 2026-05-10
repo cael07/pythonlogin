@@ -92,6 +92,16 @@
               </div>
             </div>
 
+            <div v-if="rideStore.currentBooking.status === 'started'" class="accepted in-progress">
+              <div class="driver-info highlight">
+                <div class="driver-avatar">🛵</div>
+                <div>
+                  <h4>Ride in Progress</h4>
+                  <p>Heading to destination</p>
+                </div>
+              </div>
+            </div>
+
             <!-- Manual Arrival Button (Only shown while en route) -->
             <button 
               v-if="rideStore.currentBooking.status === 'accepted'"
@@ -101,7 +111,25 @@
               I Have Arrived
             </button>
 
-            <button class="btn-secondary mt-3 w-100" @click="cancelRide">Cancel Ride</button>
+            <!-- Start Ride Button -->
+            <button 
+              v-if="rideStore.currentBooking.status === 'arrived'"
+              class="btn-primary w-100 mt-3" 
+              @click="onStartRide"
+            >
+              Start Ride
+            </button>
+
+            <!-- Complete Ride Button -->
+            <button 
+              v-if="rideStore.currentBooking.status === 'started'"
+              class="btn-success w-100 mt-3" 
+              @click="onCompleteRide"
+            >
+              Complete Ride
+            </button>
+
+            <button v-if="rideStore.currentBooking.status !== 'started'" class="btn-secondary mt-3 w-100" @click="cancelRide">Cancel Ride</button>
           </div>
         </div>
       </div>
@@ -307,6 +335,30 @@ const cancelRide = async () => {
   }
 }
 
+const onStartRide = async () => {
+  const success = await rideStore.startRide(rideStore.currentBooking.id)
+  if (success) {
+    const booking = rideStore.currentBooking
+    // Fetch route to destination
+    const points = await fetchRoute(driverLocation.value, { lat: booking.dropoff_lat, lng: booking.dropoff_lng })
+    if (points) {
+      drawRouteLine(points)
+      const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]))
+      map.flyToBounds(bounds, { padding: [50, 50], animate: true })
+      startSimulation(booking, points, true) // pass true to indicate to destination
+    } else {
+      // Fallback
+      startSimulation(booking, null, true)
+    }
+  }
+}
+
+const onCompleteRide = async () => {
+  if (confirm("Have you reached the destination?")) {
+     await rideStore.completeRide(rideStore.currentBooking.id)
+  }
+}
+
 // Watch for ride cancellation cleanup
 watch(() => rideStore.currentBooking, (newVal, oldVal) => {
   if (!newVal && oldVal) {
@@ -341,17 +393,18 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   return R * c
 }
 
-const startSimulation = (booking, routePoints = null) => {
+const startSimulation = (booking, routePoints = null, toDestination = false) => {
   if (animationInterval) clearInterval(animationInterval)
   
-  const targetLat = booking.pickup_lat
-  const targetLng = booking.pickup_lng
+  const targetLat = toDestination ? booking.dropoff_lat : booking.pickup_lat
+  const targetLng = toDestination ? booking.dropoff_lng : booking.pickup_lng
+  const activeStatus = toDestination ? 'started' : 'accepted'
   
   if (routePoints) {
     let currentStep = 0
     animationInterval = setInterval(async () => {
-      // If status is no longer 'accepted' (e.g. manual arrival), stop simulation
-      if (rideStore.currentBooking?.status !== 'accepted') {
+      // If status changed, stop simulation
+      if (rideStore.currentBooking?.status !== activeStatus) {
         clearInterval(animationInterval)
         animationInterval = null
         return
@@ -360,7 +413,9 @@ const startSimulation = (booking, routePoints = null) => {
       if (currentStep >= routePoints.length) {
         clearInterval(animationInterval)
         animationInterval = null
-        await rideStore.notifyArrived(booking.id)
+        if (!toDestination) {
+          await rideStore.notifyArrived(booking.id)
+        }
         if (routeLine) map.removeLayer(routeLine)
         return
       }
@@ -383,8 +438,8 @@ const startSimulation = (booking, routePoints = null) => {
     // Fallback: Straight line simulation
     const speedMetersPerStep = 25 
     animationInterval = setInterval(async () => {
-      // If status is no longer 'accepted' (e.g. manual arrival), stop simulation
-      if (rideStore.currentBooking?.status !== 'accepted') {
+      // If status changed, stop simulation
+      if (rideStore.currentBooking?.status !== activeStatus) {
         clearInterval(animationInterval)
         animationInterval = null
         return
@@ -396,7 +451,9 @@ const startSimulation = (booking, routePoints = null) => {
         animationInterval = null
         driverLocation.value = { lat: targetLat, lng: targetLng }
         updateDriverMarker()
-        await rideStore.notifyArrived(booking.id)
+        if (!toDestination) {
+           await rideStore.notifyArrived(booking.id)
+        }
         return
       }
       const ratio = speedMetersPerStep / dist
@@ -641,6 +698,14 @@ const startSimulation = (booking, routePoints = null) => {
   background: #f3f4f6;
   color: #374151;
   border: 1px solid #d1d5db;
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-weight: bold;
+}
+.btn-success {
+  background: #10b981;
+  color: #fff;
+  border: none;
   padding: 0.8rem;
   border-radius: 8px;
   font-weight: bold;

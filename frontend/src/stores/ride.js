@@ -79,6 +79,21 @@ export const useRideStore = defineStore('ride', {
             this.driverLocation = null
           }
           this.bookings = this.bookings.filter(b => b.id !== data.booking_id)
+        } else if (data.type === 'ride_started') {
+          console.log("WS: Ride has started", data)
+          if (this.currentBooking && this.currentBooking.id === data.booking_id) {
+            this.currentBooking = {
+              ...this.currentBooking,
+              status: 'started'
+            }
+          }
+        } else if (data.type === 'ride_completed') {
+          console.log("WS: Ride has been completed", data)
+          if (this.currentBooking && this.currentBooking.id === data.booking_id) {
+            this.currentBooking = null
+            this.driverLocation = null
+            alert("Ride completed! Hope you had a great trip.")
+          }
         } else if (data.type === 'booking_taken') {
           // Another driver accepted the ride, remove it from my list
           this.bookings = this.bookings.filter(b => b.id !== data.booking_id)
@@ -254,6 +269,43 @@ export const useRideStore = defineStore('ride', {
         }
       } catch (err) {
         console.error("Failed to accept booking:", err)
+      }
+      return false
+    },
+
+    async startRide(bookingId) {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = isLocal ? 'http://localhost:8000' : this.getApiHost();
+      
+      try {
+        const res = await fetch(`${host}/ride/bookings/${bookingId}/start`, {
+          method: 'POST'
+        })
+        if (res.ok) {
+           if (this.currentBooking) this.currentBooking.status = 'started'
+           return true
+        }
+      } catch (err) {
+        console.error("Failed to start ride:", err)
+      }
+      return false
+    },
+
+    async completeRide(bookingId) {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = isLocal ? 'http://localhost:8000' : this.getApiHost();
+      
+      try {
+        const res = await fetch(`${host}/ride/bookings/${bookingId}/complete`, {
+          method: 'POST'
+        })
+        if (res.ok) {
+           this.currentBooking = null
+           this.driverLocation = null
+           return true
+        }
+      } catch (err) {
+        console.error("Failed to complete ride:", err)
       }
       return false
     }

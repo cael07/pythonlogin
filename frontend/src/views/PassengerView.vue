@@ -112,6 +112,15 @@
                 </div>
               </div>
             </div>
+            <div v-if="rideStore.currentBooking.status === 'started'" class="accepted started">
+              <div class="driver-info highlight">
+                <div class="driver-avatar">🏁</div>
+                <div>
+                  <h4>On your way!</h4>
+                  <p>Heading to destination</p>
+                </div>
+              </div>
+            </div>
             <button class="btn-secondary mt-3 w-100" @click="cancelRide">Cancel Ride</button>
           </div>
         </div>
@@ -451,6 +460,16 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
         // Just focus on pickup for now
         map.flyTo([pickup.value.lat, pickup.value.lng], 15)
       }
+    } else if (newVal.status === 'started') {
+      // Re-add destination marker when trip starts
+      if (dropoffMarker) map.removeLayer(dropoffMarker)
+      dropoffMarker = L.marker([newVal.dropoff_lat, newVal.dropoff_lng], { icon: destIcon }).addTo(map)
+      
+      // Zoom to show both
+      if (rideStore.driverLocation) {
+        const bounds = L.latLngBounds([newVal.dropoff_lat, newVal.dropoff_lng], [rideStore.driverLocation.lat, rideStore.driverLocation.lng])
+        map.flyToBounds(bounds, { padding: [100, 100], animate: true })
+      }
     }
   }
 }, { deep: true })
@@ -492,15 +511,16 @@ watch(() => rideStore.driverLocation, async (newLoc) => {
 
   // Update path periodically
   const now = Date.now()
-  if (now - lastRouteFetch > 5000 && pickup.value) {
+  const target = (rideStore.currentBooking?.status === 'started') ? dropoff.value : pickup.value
+
+  if (now - lastRouteFetch > 5000 && target) {
     lastRouteFetch = now
-    const points = await fetchRoute(newLoc, pickup.value)
+    const points = await fetchRoute(newLoc, target)
     if (points) drawRouteLine(points)
   }
 
-  // Auto-zoom to show both passenger and driver
-  if (pickup.value && newLoc) {
-    const bounds = L.latLngBounds([pickup.value.lat, pickup.value.lng], [newLoc.lat, newLoc.lng])
+  if (target && newLoc) {
+    const bounds = L.latLngBounds([target.lat, target.lng], [newLoc.lat, newLoc.lng])
     map.flyToBounds(bounds, { padding: [100, 100], animate: true, duration: 1 })
   }
 }, { deep: true })

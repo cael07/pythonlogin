@@ -48,7 +48,7 @@ async def get_active_booking(user_id: int, db: Session = Depends(get_db)):
             Booking.passenger_id == user_id,
             Booking.driver_id == user_id
         ),
-        Booking.status.in_(["pending", "accepted", "arrived"])
+        Booking.status.in_(["pending", "accepted", "arrived", "started"])
     ).order_by(Booking.id.desc()).first()
     
     if not booking:
@@ -77,7 +77,7 @@ async def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
     # Check for existing active booking first
     active = db.query(Booking).filter(
         Booking.passenger_id == booking.passenger_id,
-        Booking.status.in_(["pending", "accepted", "arrived"])
+        Booking.status.in_(["pending", "accepted", "arrived", "started"])
     ).first()
     
     if active:
@@ -190,6 +190,40 @@ async def notify_arrived(booking_id: int, db: Session = Depends(get_db)):
         await manager.send_personal_message(msg, booking.driver_id)
         
     return {"message": "Arrival notification sent to all parties"}
+
+@router.post("/bookings/{booking_id}/start")
+async def start_ride(booking_id: int, db: Session = Depends(get_db)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    booking.status = "started"
+    db.commit()
+    
+    # Notify passenger
+    msg = json.dumps({
+        "type": "ride_started",
+        "booking_id": booking.id
+    })
+    await manager.send_personal_message(msg, booking.passenger_id)
+    return {"message": "Ride started"}
+
+@router.post("/bookings/{booking_id}/complete")
+async def complete_ride(booking_id: int, db: Session = Depends(get_db)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    booking.status = "completed"
+    db.commit()
+    
+    # Notify passenger
+    msg = json.dumps({
+        "type": "ride_completed",
+        "booking_id": booking.id
+    })
+    await manager.send_personal_message(msg, booking.passenger_id)
+    return {"message": "Ride completed"}
 
 @router.post("/bookings/{booking_id}/cancel")
 async def cancel_booking(booking_id: int, db: Session = Depends(get_db)):
