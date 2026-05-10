@@ -214,6 +214,11 @@ async def start_ride(booking_id: int, db: Session = Depends(get_db)):
     booking.status = "started"
     db.commit()
     
+    # Notify parties
+    msg = json.dumps({
+        "type": "ride_started",
+        "booking_id": booking.id
+    })
     await manager.send_personal_message(msg, booking.passenger_id)
     
     # Notify driver
@@ -231,6 +236,11 @@ async def complete_ride(booking_id: int, db: Session = Depends(get_db)):
     booking.status = "completed"
     db.commit()
     
+    # Notify parties
+    msg = json.dumps({
+        "type": "ride_completed",
+        "booking_id": booking.id
+    })
     await manager.send_personal_message(msg, booking.passenger_id)
 
     # Notify driver
