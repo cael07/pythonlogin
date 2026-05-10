@@ -151,6 +151,8 @@ let passengerMarker = null
 let heartbeatInterval = null
 let watchId = null
 let routeLine = null
+const routePoints = ref([])
+let lastBearing = 0
 
 const isSheetExpanded = ref(false)
 const addressNames = ref({})
@@ -174,6 +176,17 @@ const resolveAddress = async (lat, lng) => {
     console.warn("Reverse geocoding suppressed")
   }
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+}
+
+const getBearing = (startLat, startLng, destLat, destLng) => {
+  const toRad = (v) => v * Math.PI / 180
+  const toDeg = (v) => v * 180 / Math.PI
+  
+  const y = Math.sin(toRad(destLng - startLng)) * Math.cos(toRad(destLat))
+  const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
+            Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLng - startLng))
+  const brng = toDeg(Math.atan2(y, x))
+  return (brng + 360) % 360
 }
 
 watch(() => rideStore.bookings, async (newBookings) => {
@@ -220,25 +233,38 @@ onMounted(async () => {
   if ("geolocation" in navigator) {
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        driverLocation.value = {
+        const newLoc = {
           lat: position.coords.latitude,
           lng: position.coords.longitude
         }
+        
+        // Calculate bearing for rotation
+        if (driverLocation.value) {
+          const bearing = getBearing(driverLocation.value.lat, driverLocation.value.lng, newLoc.lat, newLoc.lng)
+          if (getDistance(driverLocation.value.lat, driverLocation.value.lng, newLoc.lat, newLoc.lng) > 2) {
+             lastBearing = bearing
+          }
+        }
+
+        driverLocation.value = newLoc
         updateDriverMarker()
         
         // Send live GPS update if in a ride
         if (rideStore.currentBooking) {
           rideStore.updateLocation(rideStore.currentBooking.id, driverLocation.value.lat, driverLocation.value.lng)
           
-          // Navigation view logic: keep icon at bottom-middle
+          // Navigation view logic: keep icon above bottom sheet
           if (!map.userHasMoved) {
             const zoom = map.getZoom()
             const centerPoint = map.project([driverLocation.value.lat, driverLocation.value.lng], zoom)
-            // Shift the center "up" by 30% of the screen height
-            const targetPoint = L.point(centerPoint.x, centerPoint.y - (map.getSize().y * 0.3))
+            // Shift the center "up" to push icon to visible area above sheet
+            const targetPoint = L.point(centerPoint.x, centerPoint.y - (map.getSize().y * 0.15))
             const targetLatLng = map.unproject(targetPoint, zoom)
             map.panTo(targetLatLng, { animate: true, duration: 0.5 })
           }
+
+          // Rerouting check
+          checkReroute()
 
           // Auto-arrival check based on real GPS
           if (rideStore.currentBooking.status === 'accepted') {
@@ -290,6 +316,15 @@ const updateDriverMarker = () => {
   } else {
     driverMarker.setLatLng([driverLocation.value.lat, driverLocation.value.lng])
   }
+  
+  // Apply rotation to the marker element
+  const el = driverMarker.getElement()
+  if (el) {
+    const pin = el.querySelector('.marker-pin')
+    if (pin) {
+      pin.style.transform = `rotate(${lastBearing}deg)`
+    }
+  }
 }
 
 const fetchRoute = async (start, end) => {
@@ -307,6 +342,7 @@ const fetchRoute = async (start, end) => {
 
 const drawRouteLine = (points) => {
   if (routeLine) map.removeLayer(routeLine)
+  routePoints.value = points
   const latLngs = points.map(p => [p.lat, p.lng])
   routeLine = L.polyline(latLngs, {
     color: '#2e3192',
@@ -373,7 +409,33 @@ const onStartRide = async () => {
 
 const onCompleteRide = async () => {
   if (confirm("Have you reached the destination?")) {
-     await rideStore.completeRide(rideStore.currentBooking.id)
+     const success = await rideStore.completeRide(rideStore.currentBooking.id)
+     if (success) {
+       routePoints.value = []
+     }
+  }
+}
+
+const checkReroute = async () => {
+  if (!rideStore.currentBooking || !routePoints.value || routePoints.value.length < 2) return
+  
+  let minDist = Infinity
+  for (const p of routePoints.value) {
+    const d = getDistance(driverLocation.value.lat, driverLocation.value.lng, p.lat, p.lng)
+    if (d < minDist) minDist = d
+  }
+  
+  // If driver is more than 150m away from the route, recalculate
+  if (minDist > 150) {
+    console.log("Rerouting...")
+    const target = (rideStore.currentBooking.status === 'started') 
+      ? { lat: rideStore.currentBooking.dropoff_lat, lng: rideStore.currentBooking.dropoff_lng }
+      : { lat: rideStore.currentBooking.pickup_lat, lng: rideStore.currentBooking.pickup_lng }
+      
+    const points = await fetchRoute(driverLocation.value, target)
+    if (points) {
+      drawRouteLine(points)
+    }
   }
 }
 
@@ -426,6 +488,8 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   width: 100%;
   height: 100%;
   z-index: 1;
+  transform: perspective(1000px) rotateX(15deg);
+  transform-origin: bottom;
 }
 
 :deep(.custom-map-marker) { background: transparent; border: none; }
