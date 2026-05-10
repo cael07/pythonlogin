@@ -77,7 +77,6 @@
                   <p>Location updating live</p>
                 </div>
               </div>
-              <button class="btn-primary w-100 mt-3" @click="rideStore.notifyArrived(rideStore.currentBooking.id)">I Have Arrived</button>
             </div>
 
             <div v-if="rideStore.currentBooking.status === 'arrived'" class="accepted arrived">
@@ -92,6 +91,16 @@
                 </div>
               </div>
             </div>
+
+            <!-- Manual Arrival Button (Only shown while en route) -->
+            <button 
+              v-if="rideStore.currentBooking.status === 'accepted'"
+              class="btn-primary w-100 mt-3" 
+              @click="rideStore.notifyArrived(rideStore.currentBooking.id)"
+            >
+              I Have Arrived
+            </button>
+
             <button class="btn-secondary mt-3 w-100" @click="cancelRide">Cancel Ride</button>
           </div>
         </div>
@@ -341,6 +350,13 @@ const startSimulation = (booking, routePoints = null) => {
   if (routePoints) {
     let currentStep = 0
     animationInterval = setInterval(async () => {
+      // If status is no longer 'accepted' (e.g. manual arrival), stop simulation
+      if (rideStore.currentBooking?.status !== 'accepted') {
+        clearInterval(animationInterval)
+        animationInterval = null
+        return
+      }
+
       if (currentStep >= routePoints.length) {
         clearInterval(animationInterval)
         animationInterval = null
@@ -367,6 +383,13 @@ const startSimulation = (booking, routePoints = null) => {
     // Fallback: Straight line simulation
     const speedMetersPerStep = 25 
     animationInterval = setInterval(async () => {
+      // If status is no longer 'accepted' (e.g. manual arrival), stop simulation
+      if (rideStore.currentBooking?.status !== 'accepted') {
+        clearInterval(animationInterval)
+        animationInterval = null
+        return
+      }
+
       const dist = getDistance(driverLocation.value.lat, driverLocation.value.lng, targetLat, targetLng)
       if (dist < 30) {
         clearInterval(animationInterval)
