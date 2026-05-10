@@ -249,26 +249,34 @@ onMounted(async () => {
         driverLocation.value = newLoc
         updateDriverMarker()
         
-        // Update map orientation
+        // Update map orientation and position
         if (map && !map.userHasMoved && rideStore.currentBooking) {
           const mapEl = document.querySelector('.map-container')
           if (mapEl) {
             mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
           }
+          
+          // Position icon at bottom-center by panning to a point "ahead" in the travel direction
+          const zoom = map.getZoom()
+          if (zoom < 17) map.setZoom(18)
+          
+          const offset = 0.0012 // Adjusted offset for zoom 18
+          const angleRad = (lastBearing * Math.PI) / 180
+          
+          // Note: In Leaflet, Lat increases North. 
+          // Bearing 0 is North. So targetLat = currentLat + offset * cos(0)
+          const targetLat = newLoc.lat + offset * Math.cos(angleRad)
+          const targetLng = newLoc.lng + offset * Math.sin(angleRad)
+          
+          map.panTo([targetLat, targetLng], { animate: true, duration: 0.5 })
+        } else if (map && !map.userHasMoved) {
+          map.panTo([newLoc.lat, newLoc.lng], { animate: true })
         }
 
         // Send live GPS update if in a ride
         if (rideStore.currentBooking) {
-          rideStore.updateLocation(rideStore.currentBooking.id, driverLocation.value.lat, driverLocation.value.lng)
+          rideStore.updateLocation(rideStore.currentBooking.id, newLoc.lat, newLoc.lng)
           
-          if (!map.userHasMoved) {
-             // Zoom in closer for navigation
-             const currentZoom = map.getZoom()
-             if (currentZoom < 17) map.setZoom(18)
-             
-             map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
-          }
-
           // Rerouting check
           checkReroute()
 
@@ -407,6 +415,13 @@ const onStartRide = async () => {
   const success = await rideStore.startRide(rideStore.currentBooking.id)
   if (success) {
     const booking = rideStore.currentBooking
+    
+    // Hide pickup marker once ride starts
+    if (passengerMarker) {
+      map.removeLayer(passengerMarker)
+      passengerMarker = null
+    }
+
     // Fetch route to destination
     const points = await fetchRoute(driverLocation.value, { lat: booking.dropoff_lat, lng: booking.dropoff_lng })
     if (points) {
