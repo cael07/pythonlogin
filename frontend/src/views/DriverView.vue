@@ -77,6 +77,7 @@
                   <p>Location updating live</p>
                 </div>
               </div>
+              <button class="btn-primary w-100 mt-3" @click="rideStore.notifyArrived(rideStore.currentBooking.id)">I Have Arrived</button>
             </div>
 
             <div v-if="rideStore.currentBooking.status === 'arrived'" class="accepted arrived">
@@ -111,6 +112,7 @@ let map = null
 let driverMarker = null
 let passengerMarker = null
 let animationInterval = null
+let heartbeatInterval = null
 let watchId = null
 let routeLine = null
 
@@ -187,6 +189,10 @@ onMounted(async () => {
           lng: position.coords.longitude
         }
         updateDriverMarker()
+        // Send live GPS update if in a ride
+        if (rideStore.currentBooking) {
+          rideStore.updateLocation(rideStore.currentBooking.id, driverLocation.value.lat, driverLocation.value.lng)
+        }
         if (!map.userHasMoved && !rideStore.currentBooking) {
           map.setView([driverLocation.value.lat, driverLocation.value.lng], 15)
         }
@@ -202,11 +208,19 @@ onMounted(async () => {
   }
 
   map.on('dragstart', () => { map.userHasMoved = true })
+
+  // Heartbeat to keep driver icon visible even when stationary
+  heartbeatInterval = setInterval(() => {
+    if (rideStore.currentBooking && driverLocation.value) {
+      rideStore.updateLocation(rideStore.currentBooking.id, driverLocation.value.lat, driverLocation.value.lng)
+    }
+  }, 10000) // Every 10 seconds
 })
 
 onUnmounted(() => {
   if (map) map.remove()
   if (animationInterval) clearInterval(animationInterval)
+  if (heartbeatInterval) clearInterval(heartbeatInterval)
   if (watchId && navigator.geolocation) navigator.geolocation.clearWatch(watchId)
 })
 
