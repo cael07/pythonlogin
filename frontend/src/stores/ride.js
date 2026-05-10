@@ -90,6 +90,7 @@ export const useRideStore = defineStore('ride', {
         } else if (data.type === 'ride_completed') {
           console.log("WS: Ride has been completed", data)
           if (this.currentBooking && this.currentBooking.id === data.booking_id) {
+            this.currentBooking.status = 'completed'
             this.currentBooking = null
             this.driverLocation = null
             alert("Ride completed! Hope you had a great trip.")
@@ -294,6 +295,7 @@ export const useRideStore = defineStore('ride', {
           method: 'POST'
         })
         if (res.ok) {
+           if (this.currentBooking) this.currentBooking.status = 'completed'
            this.currentBooking = null
            this.driverLocation = null
            return true

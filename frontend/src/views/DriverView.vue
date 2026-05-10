@@ -230,6 +230,16 @@ onMounted(async () => {
         if (rideStore.currentBooking) {
           rideStore.updateLocation(rideStore.currentBooking.id, driverLocation.value.lat, driverLocation.value.lng)
           
+          // Navigation view logic: keep icon at bottom-middle
+          if (!map.userHasMoved) {
+            const zoom = map.getZoom()
+            const centerPoint = map.project([driverLocation.value.lat, driverLocation.value.lng], zoom)
+            // Shift the center "up" by 30% of the screen height
+            const targetPoint = L.point(centerPoint.x, centerPoint.y - (map.getSize().y * 0.3))
+            const targetLatLng = map.unproject(targetPoint, zoom)
+            map.panTo(targetLatLng, { animate: true, duration: 0.5 })
+          }
+
           // Auto-arrival check based on real GPS
           if (rideStore.currentBooking.status === 'accepted') {
             const dist = getDistance(
@@ -300,18 +310,19 @@ const drawRouteLine = (points) => {
   const latLngs = points.map(p => [p.lat, p.lng])
   routeLine = L.polyline(latLngs, {
     color: '#2e3192',
-    weight: 6,
-    opacity: 0.6,
+    weight: 10, // Wider
+    opacity: 0.9,
     lineJoin: 'round',
-    dashArray: '1, 10', // subtle dashed look
-    dashOffset: '0'
+    lineCap: 'round'
   }).addTo(map)
   
-  // Add a solid line underneath for better visibility
+  // Add a slightly lighter center line for a "premium" look
   L.polyline(latLngs, {
-    color: '#2e3192',
-    weight: 2,
-    opacity: 0.3
+    color: '#4f46e5',
+    weight: 4,
+    opacity: 1,
+    lineJoin: 'round',
+    lineCap: 'round'
   }).addTo(map)
 }
 
@@ -379,7 +390,7 @@ watch(() => rideStore.currentBooking, (newVal, oldVal) => {
       routeLine = null
     }
     // If it was cancelled by someone else, notify
-    if (oldVal.status !== 'completed') {
+    if (oldVal.status !== 'completed' && oldVal.status !== 'cancelled') {
        alert("Ride has been cancelled.")
     }
   }
