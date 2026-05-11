@@ -200,17 +200,6 @@ const getBearing = (startLat, startLng, destLat, destLng) => {
   return (brng + 360) % 360
 }
 
-const getBearing = (startLat, startLng, destLat, destLng) => {
-  const toRad = (v) => v * Math.PI / 180
-  const toDeg = (v) => v * 180 / Math.PI
-  
-  const y = Math.sin(toRad(destLng - startLng)) * Math.cos(toRad(destLat))
-  const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
-            Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLng - startLng))
-  const brng = toDeg(Math.atan2(y, x))
-  return (brng + 360) % 360
-}
-
 watch(() => rideStore.bookings, async (newBookings) => {
   for (const b of newBookings) {
     if (!addressNames.value[b.id]) {
