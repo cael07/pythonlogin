@@ -100,6 +100,16 @@
                   <p>Heading to destination</p>
                 </div>
               </div>
+              
+              <!-- Waze Navigation Integration -->
+              <a 
+                :href="`https://waze.com/ul?ll=${rideStore.currentBooking.dropoff_lat},${rideStore.currentBooking.dropoff_lng}&navigate=yes`"
+                target="_blank"
+                class="btn-waze w-100 mt-3"
+              >
+                <img src="https://upload.wikimedia.org/wikipedia/commons/6/66/Waze_logo.svg" width="20" alt="Waze" />
+                Navigate in Waze
+              </a>
             </div>
 
             <!-- Manual Arrival Button (Only shown while en route) -->
@@ -153,6 +163,7 @@ let watchId = null
 let routeLayer = null
 const routePoints = ref([])
 let lastBearing = 0
+let autoFollowTimeout = null
 
 const isSheetExpanded = ref(false)
 const addressNames = ref({})
@@ -176,6 +187,17 @@ const resolveAddress = async (lat, lng) => {
     console.warn("Reverse geocoding suppressed")
   }
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+}
+
+const getBearing = (startLat, startLng, destLat, destLng) => {
+  const toRad = (v) => v * Math.PI / 180
+  const toDeg = (v) => v * 180 / Math.PI
+  
+  const y = Math.sin(toRad(destLng - startLng)) * Math.cos(toRad(destLat))
+  const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
+            Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLng - startLng))
+  const brng = toDeg(Math.atan2(y, x))
+  return (brng + 360) % 360
 }
 
 const getBearing = (startLat, startLng, destLat, destLng) => {
@@ -249,28 +271,28 @@ onMounted(async () => {
         driverLocation.value = newLoc
         updateDriverMarker()
         
-        // Update map orientation and position
-        if (map && !map.userHasMoved && rideStore.currentBooking) {
-          const mapEl = document.querySelector('.map-container')
-          if (mapEl) {
-            mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
+        // Auto-follow / Navigation Logic
+        if (map && !map.userHasMoved) {
+          if (rideStore.currentBooking) {
+            const mapEl = document.querySelector('.map-container')
+            if (mapEl) {
+              mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
+            }
+            
+            // Zoom in for nav
+            const zoom = map.getZoom()
+            if (zoom < 17) map.setZoom(18)
+            
+            // Forward-looking offset to keep icon at bottom-center
+            const offset = 0.0012 
+            const angleRad = (lastBearing * Math.PI) / 180
+            const targetLat = newLoc.lat + offset * Math.cos(angleRad)
+            const targetLng = newLoc.lng + offset * Math.sin(angleRad)
+            
+            map.panTo([targetLat, targetLng], { animate: true, duration: 0.5 })
+          } else {
+             map.panTo([newLoc.lat, newLoc.lng], { animate: true })
           }
-          
-          // Position icon at bottom-center by panning to a point "ahead" in the travel direction
-          const zoom = map.getZoom()
-          if (zoom < 17) map.setZoom(18)
-          
-          const offset = 0.0012 // Adjusted offset for zoom 18
-          const angleRad = (lastBearing * Math.PI) / 180
-          
-          // Note: In Leaflet, Lat increases North. 
-          // Bearing 0 is North. So targetLat = currentLat + offset * cos(0)
-          const targetLat = newLoc.lat + offset * Math.cos(angleRad)
-          const targetLng = newLoc.lng + offset * Math.sin(angleRad)
-          
-          map.panTo([targetLat, targetLng], { animate: true, duration: 0.5 })
-        } else if (map && !map.userHasMoved) {
-          map.panTo([newLoc.lat, newLoc.lng], { animate: true })
         }
 
         // Send live GPS update if in a ride
@@ -293,10 +315,6 @@ onMounted(async () => {
             }
           }
         }
-
-        if (!map.userHasMoved && !rideStore.currentBooking) {
-          map.setView([driverLocation.value.lat, driverLocation.value.lng], 15)
-        }
       },
       (error) => {
         console.error("Driver Geolocation Error:", error)
@@ -308,7 +326,14 @@ onMounted(async () => {
     updateDriverMarker()
   }
 
-  map.on('dragstart', () => { map.userHasMoved = true })
+  map.on('dragstart', () => { 
+    map.userHasMoved = true 
+    if (autoFollowTimeout) clearTimeout(autoFollowTimeout)
+    // Snap back to driver after 5 seconds of no interaction
+    autoFollowTimeout = setTimeout(() => {
+      map.userHasMoved = false
+    }, 5000)
+  })
 
   // Heartbeat to keep driver icon visible even when stationary
   heartbeatInterval = setInterval(() => {
@@ -427,17 +452,12 @@ const onStartRide = async () => {
     if (points) {
       drawRouteLine(points)
       
-      // Instead of flyToBounds (which zooms out), stay centered on driver
-      // The watchPosition logic will handle the orientation and bottom-centering
+      // Initial zoom for navigation
       map.setZoom(18)
       
-      // Force an immediate orientation toward the first point of the route
+      // Set initial bearing toward first point
       if (points.length > 1) {
         lastBearing = getBearing(driverLocation.value.lat, driverLocation.value.lng, points[1].lat, points[1].lng)
-        const mapEl = document.querySelector('.map-container')
-        if (mapEl) {
-          mapEl.style.setProperty('--map-rotation', `${-lastBearing}deg`)
-        }
       }
     }
   }
@@ -530,9 +550,9 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   height: 200%;
   z-index: 1;
   background: #e5e7eb;
-  /* Flat top-view with Heading Up rotation */
+  /* Heading Up rotation */
   transform: rotateZ(var(--map-rotation, 0deg));
-  transform-origin: center center; /* Default center rotation */
+  transform-origin: center center;
   transition: transform 0.5s ease-out;
 }
 
@@ -763,6 +783,21 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
 .mt-2 { margin-top: 0.5rem; }
 .mt-3 { margin-top: 0.75rem; }
 .w-100 { width: 100%; }
+
+.btn-waze {
+  background: #33ccff;
+  color: #fff;
+  border: none;
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-weight: bold;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: 0 4px 12px rgba(51, 204, 255, 0.3);
+}
 
 .driver-info {
   display: flex; align-items: center; justify-content: center; gap: 1rem;
