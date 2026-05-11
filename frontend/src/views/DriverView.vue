@@ -22,6 +22,17 @@
       </div>
     </div>
 
+    <!-- Floating Map Controls -->
+    <div class="map-controls">
+      <button 
+        class="control-btn recenter-btn" 
+        @click="recenterMap"
+        title="Recenter"
+      >
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+      </button>
+    </div>
+
     <!-- Bottom Sheet -->
     <div :class="['bottom-sheet', 'glass', { expanded: isSheetExpanded }]">
       <div class="sheet-header" @click="isSheetExpanded = !isSheetExpanded">
@@ -77,6 +88,16 @@
                   <p>Location updating live</p>
                 </div>
               </div>
+              
+              <!-- Waze Navigation to Pickup -->
+              <a 
+                :href="`https://waze.com/ul?ll=${rideStore.currentBooking.pickup_lat},${rideStore.currentBooking.pickup_lng}&navigate=yes&from=${driverLocation.lat},${driverLocation.lng}`"
+                target="_blank"
+                class="btn-waze w-100 mt-3"
+              >
+                <img src="https://upload.wikimedia.org/wikipedia/commons/6/66/Waze_logo.svg" width="20" alt="Waze" />
+                Navigate to Pickup (Waze)
+              </a>
             </div>
 
             <div v-if="rideStore.currentBooking.status === 'arrived'" class="accepted arrived">
@@ -103,7 +124,7 @@
               
               <!-- Waze Navigation Integration -->
               <a 
-                :href="`https://waze.com/ul?ll=${rideStore.currentBooking.dropoff_lat},${rideStore.currentBooking.dropoff_lng}&navigate=yes`"
+                :href="`https://waze.com/ul?ll=${rideStore.currentBooking.dropoff_lat},${rideStore.currentBooking.dropoff_lng}&navigate=yes&from=${driverLocation.lat},${driverLocation.lng}`"
                 target="_blank"
                 class="btn-waze w-100 mt-3"
               >
@@ -352,6 +373,14 @@ const updateDriverMarker = () => {
       // Icon stays straight (pointing UP) while map rotates around it
       pin.style.transform = `rotate(${lastBearing}deg)`
     }
+  }
+}
+
+const recenterMap = () => {
+  if (map && driverLocation.value) {
+    map.userHasMoved = false
+    map.setZoom(18)
+    map.panTo([driverLocation.value.lat, driverLocation.value.lng], { animate: true })
   }
 }
 
@@ -786,6 +815,39 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   justify-content: center;
   gap: 10px;
   box-shadow: 0 4px 12px rgba(51, 204, 255, 0.3);
+}
+
+.map-controls {
+  position: absolute;
+  right: 1rem;
+  bottom: 120px; /* Above the bottom sheet drag handle */
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.control-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  color: #2e3192;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.control-btn:active {
+  transform: scale(0.9);
+}
+
+.recenter-btn {
+  color: #2e3192;
 }
 
 .driver-info {
