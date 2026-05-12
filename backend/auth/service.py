@@ -102,7 +102,8 @@ def register_user(
         email=data.email,
         password_hash=hash_password(data.password),
         face_image_path=face_path,
-        face_image_base64=face_image_b64 # Store in DB for persistence on Render
+        face_image_base64=face_image_b64,
+        role=data.role if data.role else "passenger",
     )
     db.add(user)
     db.commit()

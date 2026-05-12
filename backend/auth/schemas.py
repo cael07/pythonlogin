@@ -9,6 +9,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     confirm_password: str
+    role: Optional[str] = "passenger"
 
     @field_validator("confirm_password")
     @classmethod
@@ -47,6 +48,7 @@ class UserOut(BaseModel):
     face_image_path: str | None = None
     face_image_base64: str | None = None
     is_active: bool
+    role: str
     created_at: datetime
 
     model_config = {"from_attributes": True}
