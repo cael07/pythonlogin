@@ -37,7 +37,7 @@ async def global_exception_handler(request: Request, exc: Exception):
             "trace": err_trace
         },
         headers={
-            "Access-Control-Allow-Origin": "https://pythonlogin-h4ev.onrender.com",
+            "Access-Control-Allow-Origin": request.headers.get("origin") or "*",
             "Access-Control-Allow-Credentials": "true"
         }
     )
@@ -48,6 +48,10 @@ app.add_middleware(
     allow_origins=[
         "https://pythonlogin-h4ev.onrender.com",
         "https://pythonlogin-h4ev.onrender.com/",
+        "https://pythonlogin-driver.onrender.com",
+        "https://pythonlogin-driver.onrender.com/",
+        "https://pythonlogin-passenger.onrender.com",
+        "https://pythonlogin-passenger.onrender.com/",
         "http://localhost:5173",
         "http://localhost:5173/",
         "http://127.0.0.1:5173",
@@ -68,8 +72,8 @@ class CORSStaticFiles(StaticFiles):
     async def __call__(self, scope, receive, send):
         async def send_with_cors(message):
             if message["type"] == "http.response.start":
-                headers = dict(message.get("headers", []))
-                headers[b"access-control-allow-origin"] = b"https://pythonlogin-h4ev.onrender.com"
+                origin = headers.get(b"origin", b"*").decode()
+                headers[b"access-control-allow-origin"] = origin.encode()
                 headers[b"access-control-allow-credentials"] = b"true"
                 message["headers"] = list(headers.items())
             await send(message)
