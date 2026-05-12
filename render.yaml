@@ -10,8 +10,9 @@ services:
       - key: DATABASE_URL
         value: postgresql://inventory_db_srkn_user:Ll4V8W4gZlH8hZTcsRDZb4U2Cq4nul3v@dpg-d7qdophkh4rs73fgjfgg-a.oregon-postgres.render.com/inventory_db_srkn
 
-  - type: static
+  - type: web
     name: pythonlogin-driver
+    runtime: static
     rootDir: frontend_driver
     buildCommand: npm install && npm run build
     publishPath: dist
@@ -19,8 +20,9 @@ services:
       - key: VITE_API_URL
         value: https://pythonlogin-backend.onrender.com
 
-  - type: static
+  - type: web
     name: pythonlogin-passenger
+    runtime: static
     rootDir: frontend_passenger
     buildCommand: npm install && npm run build
     publishPath: dist
