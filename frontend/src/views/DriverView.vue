@@ -98,6 +98,11 @@
                 <img src="https://upload.wikimedia.org/wikipedia/commons/6/66/Waze_logo.svg" width="20" alt="Waze" />
                 Navigate to Pickup (Waze)
               </a>
+
+              <!-- Google Maps Placeholder -->
+              <button class="btn-disabled w-100 mt-2" disabled>
+                Google Map (Unavailable on trial)
+              </button>
             </div>
 
             <div v-if="rideStore.currentBooking.status === 'arrived'" class="accepted arrived">
@@ -131,6 +136,11 @@
                 <img src="https://upload.wikimedia.org/wikipedia/commons/6/66/Waze_logo.svg" width="20" alt="Waze" />
                 Navigate in Waze
               </a>
+
+              <!-- Google Maps Placeholder -->
+              <button class="btn-disabled w-100 mt-2" disabled>
+                Google Map (Unavailable on trial)
+              </button>
             </div>
 
             <!-- Manual Arrival Button (Only shown while en route) -->
@@ -238,7 +248,13 @@ const driverLocation = ref({ lat: 14.5800, lng: 120.9700 })
 
 const carIcon = L.divIcon({
   className: 'custom-map-marker',
-  html: `<div class="marker-pin car-pin">🚗</div>`,
+  html: `
+    <div class="marker-pin nav-arrow-pin">
+      <svg viewBox="0 0 24 24" width="36" height="36" fill="#fff">
+        <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
+      </svg>
+    </div>
+  `,
   iconSize: [40, 40],
   iconAnchor: [20, 20]
 })
@@ -583,7 +599,19 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   display: flex; align-items: center; justify-content: center;
   font-size: 16px;
 }
-:deep(.car-pin) { background: #2e3192; border: 3px solid #fff; }
+:deep(.nav-arrow-pin) { 
+  background: #2e3192; 
+  border: 3px solid #fff;
+  width: 44px !important;
+  height: 44px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.nav-arrow-pin svg) {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
 :deep(.pickup-pin) { background: #3498db; }
 
 /* UI Overlays */
@@ -815,6 +843,16 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   justify-content: center;
   gap: 10px;
   box-shadow: 0 4px 12px rgba(51, 204, 255, 0.3);
+}
+
+.btn-disabled {
+  background: #e2e8f0;
+  color: #94a3b8;
+  border: 1px dashed #cbd5e1;
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: not-allowed;
 }
 
 .map-controls {
