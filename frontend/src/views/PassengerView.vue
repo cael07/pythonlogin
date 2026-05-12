@@ -55,31 +55,36 @@
     <!-- Bottom Sheet -->
     <div :class="['bottom-sheet', 'glass', { expanded: isSheetExpanded }]">
       <div class="sheet-header" @click="isSheetExpanded = !isSheetExpanded">
-        <div class="drag-handle"></div>
+        <div class="drag-handle">
+          <svg v-if="!isSheetExpanded" viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+          <svg v-else viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+        </div>
         <h3 v-if="!rideStore.currentBooking" class="sheet-title">Choose your Ride</h3>
         <h3 v-else class="sheet-title">Status: <span :class="['status-badge', rideStore.currentBooking.status]">{{ rideStore.currentBooking.status }}</span></h3>
       </div>
 
       <div class="sheet-content-wrapper">
         <div v-if="!rideStore.currentBooking" class="h-100 flex-col">
-          <div class="ride-options">
-            <div class="ride-option active">
-              <div class="ride-icon">🛵</div>
-              <div class="ride-details">
-                <h4>MC Taxi</h4>
-                <p>Beat the traffic</p>
+          <div v-show="isSheetExpanded">
+            <div class="ride-options">
+              <div class="ride-option active">
+                <div class="ride-icon">🛵</div>
+                <div class="ride-details">
+                  <h4>MC Taxi</h4>
+                  <p>Beat the traffic</p>
+                </div>
+                <div class="ride-price">₱ {{ ridePrice }}</div>
               </div>
-              <div class="ride-price">₱ {{ ridePrice }}</div>
             </div>
-          </div>
 
-          <button 
-            class="btn-primary btn-large book-btn" 
-            @click="requestRide" 
-            :disabled="!dropoff"
-          >
-            Book MC Taxi
-          </button>
+            <button 
+              class="btn-primary btn-large book-btn" 
+              @click="requestRide" 
+              :disabled="!dropoff"
+            >
+              Book MC Taxi
+            </button>
+          </div>
         </div>
 
         <div v-else class="status-panel">
@@ -821,7 +826,7 @@ watch(() => rideStore.driverLocation, async (newLoc) => {
   color: #333;
   height: 55vh;
   display: flex; flex-direction: column;
-  transform: translateY(calc(100% - 110px));
+  transform: translateY(calc(100% - 90px));
   transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 .bottom-sheet.expanded {
@@ -829,9 +834,16 @@ watch(() => rideStore.driverLocation, async (newLoc) => {
 }
 
 .sheet-header {
-  padding: 1.25rem 1.5rem 0.75rem 1.5rem;
+  padding: 1rem 1.5rem 0.75rem 1.5rem;
   cursor: pointer;
   flex-shrink: 0;
+  border-bottom: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.bottom-sheet.expanded .sheet-header {
   border-bottom: 1px solid #f0f0f0;
 }
 
@@ -849,9 +861,13 @@ watch(() => rideStore.driverLocation, async (newLoc) => {
 .flex-col { display: flex; flex-direction: column; }
 
 .drag-handle {
-  width: 40px; height: 4px;
-  background: #ddd; border-radius: 2px;
-  margin: 0 auto 0.75rem auto;
+  width: 100%;
+  height: 24px;
+  color: #ddd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.25rem;
   flex-shrink: 0;
 }
 
