@@ -22,12 +22,6 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/passenger',
-    name: 'Passenger',
-    component: () => import('../views/PassengerView.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
     path: '/driver',
     name: 'Driver',
     component: () => import('../views/DriverView.vue'),
