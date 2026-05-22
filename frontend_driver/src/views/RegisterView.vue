@@ -106,10 +106,14 @@
               </div>
             </div>
 
+            <div v-if="isLicenseExpired" class="alert alert-error" style="margin: 0.5rem 0; padding: 0.75rem 1rem;">
+              ⚠️ <strong>License Expired:</strong> Your Driver's License has expired. You cannot proceed with an expired license.
+            </div>
+
             <div class="btn-row">
               <button class="btn btn-ghost" @click="licenseImage = null">❌ Clear & Retake</button>
               <button class="btn btn-outline" @click="fillDemoData('license')">🪄 Prefill Demo</button>
-              <button class="btn btn-success" :disabled="!licenseNumber || !licenseName" @click="goToStep(3)">Next Step ➔</button>
+              <button class="btn btn-success" :disabled="!licenseNumber || !licenseName || isLicenseExpired" @click="goToStep(3)">Next Step ➔</button>
             </div>
           </div>
         </div>
@@ -160,10 +164,14 @@
               </div>
             </div>
 
+            <div v-if="isOrExpired" class="alert alert-error" style="margin: 0.5rem 0; padding: 0.75rem 1rem;">
+              ⚠️ <strong>Registration Expired:</strong> Your LTO Official Receipt shows an expired registration renewal date. You cannot proceed with an expired registration.
+            </div>
+
             <div class="btn-row">
               <button class="btn btn-ghost" @click="orImage = null">❌ Clear & Retake</button>
               <button class="btn btn-outline" @click="fillDemoData('or')">🪄 Prefill Demo</button>
-              <button class="btn btn-success" :disabled="!orRenewalDate" @click="goToStep(4)">Next Step ➔</button>
+              <button class="btn btn-success" :disabled="!orRenewalDate || isOrExpired" @click="goToStep(4)">Next Step ➔</button>
             </div>
           </div>
         </div>
@@ -440,6 +448,78 @@ function goToStep(nextStep) {
   step.value = nextStep
 }
 
+const isLicenseExpired = computed(() => {
+  return isDateBeforeToday(licenseExpiry.value)
+})
+
+const isOrExpired = computed(() => {
+  return isDateBeforeToday(orRenewalDate.value)
+})
+
+function isDateBeforeToday(dateStr) {
+  if (!dateStr) return false
+  const parts = dateStr.split('-')
+  if (parts.length !== 3) return false
+  const y = parseInt(parts[0], 10)
+  const m = parseInt(parts[1], 10) - 1
+  const d = parseInt(parts[2], 10)
+  const date = new Date(y, m, d)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date < today
+}
+
+function verifyDocumentText(text, docType) {
+  const upper = text.toUpperCase()
+  if (docType === 'license') {
+    return upper.includes('LICENSE') || upper.includes('DRIVER') || upper.includes('REPUBLIC')
+  } else if (docType === 'or') {
+    return upper.includes('RECEIPT') || upper.includes('OFFICIAL') || upper.includes('PAYMENT') || upper.includes('NEXT REG')
+  } else if (docType === 'cr') {
+    return upper.includes('REGISTRATION') || upper.includes('CERTIFICATE') || upper.includes('CHASSIS') || upper.includes('CR NO') || upper.includes('PLATE NO')
+  }
+  return true
+}
+
+function parseTextDates(text) {
+  const dates = []
+  const monthsMap = {
+    'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+    'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12',
+    'JANUARY': '01', 'FEBRUARY': '02', 'MARCH': '03', 'APRIL': '04', 'JUNE': '06',
+    'JULY': '07', 'AUGUST': '08', 'SEPTEMBER': '09', 'OCTOBER': '10', 'NOVEMBER': '11', 'DECEMBER': '12'
+  }
+  
+  const textDateRegex = /\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\s+(\d{1,2})\s*,\s*(\d{4})\b|\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\s+(\d{1,2})\s+(\d{4})\b/gi
+  
+  let match
+  while ((match = textDateRegex.exec(text)) !== null) {
+    const monthName = (match[1] || match[4]).toUpperCase().slice(0, 3)
+    const day = match[2] || match[5]
+    const year = match[3] || match[6]
+    
+    const monthNum = monthsMap[monthName]
+    if (monthNum) {
+      const paddedDay = day.padStart(2, '0')
+      dates.push(`${year}-${monthNum}-${paddedDay}`)
+    }
+  }
+  
+  const numericDateRegex = /\b(\d{4})[-/](\d{2})[-/](\d{2})\b|\b(\d{2})[-/](\d{2})[-/](\d{4})\b/g
+  while ((match = numericDateRegex.exec(text)) !== null) {
+    if (match[1]) {
+      dates.push(`${match[1]}-${match[2]}-${match[3]}`)
+    } else {
+      const dayOrMonth = match[4]
+      const monthOrDay = match[5]
+      const year = match[6]
+      dates.push(`${year}-${dayOrMonth}-${monthOrDay}`)
+    }
+  }
+  
+  return dates
+}
+
 onUnmounted(() => {
   stopDocCamera()
 })
@@ -483,6 +563,8 @@ function onFileChange(event, docType) {
 async function runOCR(fileBase64, docType) {
   ocrLoading.value = true
   ocrStatus.value = 'Loading OCR Neural Engines...'
+  error.value = '' // Clear existing errors
+  
   try {
     const Tesseract = await loadTesseract()
     ocrStatus.value = 'Scanning layout and geometry...'
@@ -494,9 +576,24 @@ async function runOCR(fileBase64, docType) {
     await worker.terminate()
     
     console.log(`OCR Raw parsed text for ${docType}:`, text)
-    ocrStatus.value = 'Extracting metadata...'
     
-    // Regex parsing
+    // Validate document authenticity and type
+    const isValid = verifyDocumentText(text, docType)
+    if (!isValid) {
+      if (docType === 'license') {
+        licenseImage.value = null
+        error.value = "Incorrect document. The uploaded image does not appear to be a Philippine Driver's License."
+      } else if (docType === 'or') {
+        orImage.value = null
+        error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
+      } else if (docType === 'cr') {
+        crImage.value = null
+        error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
+      }
+      return
+    }
+    
+    ocrStatus.value = 'Extracting metadata...'
     parseOCRText(text, docType)
   } catch (err) {
     console.warn("Tesseract OCR failed, falling back to simulated parser:", err)
@@ -603,8 +700,24 @@ function parseOCRText(text, docType) {
   }
   
   else if (docType === 'or') {
-    const dateMatch = text.match(/\b\d{4}[-/]\d{2}[-/]\d{2}\b/) || text.match(/\b\d{2}[-/]\d{2}[-/]\d{4}\b/)
-    orRenewalDate.value = dateMatch ? dateMatch[0].replace(/\//g, '-') : '2027-05-23'
+    const allDates = parseTextDates(text)
+    console.log("Extracted dates for OR:", allDates)
+    
+    allDates.sort()
+    const currentYear = new Date().getFullYear()
+    let renewalDate = ''
+    
+    // Find the furthest future date (which represents the next renewal registration window)
+    for (let i = allDates.length - 1; i >= 0; i--) {
+      const dateStr = allDates[i]
+      const year = parseInt(dateStr.split('-')[0], 10)
+      if (year >= currentYear) {
+        renewalDate = dateStr
+        break
+      }
+    }
+    
+    orRenewalDate.value = renewalDate || (allDates[allDates.length - 1] || '2029-03-31')
   }
   
   else if (docType === 'cr') {
