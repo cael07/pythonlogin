@@ -16,13 +16,20 @@ def register(
 ):
     try:
         user, access, refresh = service.register_user(
-            db, request.user, request.face_image, request.app_id
+            db,
+            request.user,
+            request.face_image,
+            request.app_id,
+            license_image_b64=request.license_image,
+            or_image_b64=request.or_image,
+            cr_image_b64=request.cr_image,
         )
         return {
             "access_token": access,
             "refresh_token": refresh,
             "user": user
         }
+
     except Exception as e:
         import traceback
         print(f"REGISTER ERROR:\n{traceback.format_exc()}")

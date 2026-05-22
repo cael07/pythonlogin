@@ -1,7 +1,8 @@
 # Python
-__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
+backend/*.db
 auth.db
 .env
 .venv
@@ -16,3 +17,12 @@ dist/
 # IDEs
 .vscode/
 .idea/
+
+# Runtime generated image/doc folders (created by the app at startup)
+backend/driver_docs/
+backend/face_images/
+
+# Local scratch / test scripts
+check_db.py
+test_login.py
+fix_headers.php

@@ -65,24 +65,33 @@ app.add_middleware(
 FACE_DIR = os.path.join(os.path.dirname(__file__), "face_images")
 os.makedirs(FACE_DIR, exist_ok=True)
 
+DRIVER_DIR = os.path.join(os.path.dirname(__file__), "driver_docs")
+os.makedirs(DRIVER_DIR, exist_ok=True)
+
 class CORSStaticFiles(StaticFiles):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     async def __call__(self, scope, receive, send):
+        # We need headers here to get origin
+        headers = dict(scope.get("headers", []))
         async def send_with_cors(message):
             if message["type"] == "http.response.start":
+                # Find headers
+                msg_headers = dict(message.get("headers", []))
                 origin = headers.get(b"origin", b"*").decode()
-                headers[b"access-control-allow-origin"] = origin.encode()
-                headers[b"access-control-allow-credentials"] = b"true"
-                message["headers"] = list(headers.items())
+                msg_headers[b"access-control-allow-origin"] = origin.encode()
+                msg_headers[b"access-control-allow-credentials"] = b"true"
+                message["headers"] = list(msg_headers.items())
             await send(message)
         await super().__call__(scope, receive, send_with_cors)
 
 app.mount("/face_images", CORSStaticFiles(directory=FACE_DIR), name="face_images")
+app.mount("/driver_docs", CORSStaticFiles(directory=DRIVER_DIR), name="driver_docs")
 
 app.include_router(auth_router)
 app.include_router(ride_router)
+
 
 
 @app.get("/")

@@ -127,18 +127,20 @@
 import { ref, computed } from 'vue'
 
 const props = defineProps({
-  faceImage: { type: String, required: true },
-  loading:   { type: Boolean, default: false },
+  faceImage:       { type: String, required: true },
+  loading:         { type: Boolean, default: false },
+  initialFullName: { type: String, default: '' },
 })
 const emit = defineEmits(['submit', 'retake'])
 
 const form = ref({
-  full_name:        '',
+  full_name:        props.initialFullName || '',
   username:         '',
   email:            '',
   password:         '',
   confirm_password: '',
 })
+
 
 const showPwd = ref(false)
 const touched = ref({})

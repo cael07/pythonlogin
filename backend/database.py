@@ -28,22 +28,40 @@ def get_db():
 def init_db():
     try:
         from .auth.models import User, Booking  # noqa: F401
-        
+
         # Reset database for testing (drops only tables defined in this app)
         # print("DATABASE: Resetting auth_users table for testing...")
         # Base.metadata.drop_all(bind=engine)
-        
+
         Base.metadata.create_all(bind=engine)
-        
-        # Manual migration for face_image_base64 if it doesn't exist
+
         with engine.connect() as conn:
-            try:
-                conn.execute(text("ALTER TABLE auth_users ADD COLUMN face_image_base64 TEXT"))
-                conn.commit()
-                print("DATABASE: Added face_image_base64 column to auth_users.")
-            except Exception:
-                # Column likely already exists
-                pass
+            # All columns to auto-migrate (safe: silently ignored if column already exists)
+            new_cols = [
+                # Driver text metadata
+                ("license_number",       "TEXT"),
+                ("license_image_path",   "TEXT"),
+                ("or_renewal_date",      "TEXT"),
+                ("or_image_path",        "TEXT"),
+                ("cr_plate_number",      "TEXT"),
+                ("cr_brand",             "TEXT"),
+                ("cr_color",             "TEXT"),
+                ("cr_model",             "TEXT"),
+                ("cr_owner_name",        "TEXT"),
+                ("cr_image_path",        "TEXT"),
+                # Base64 image columns stored in DB (persists on Render PostgreSQL)
+                ("face_image_b64_db",    "TEXT"),
+                ("license_image_b64_db", "TEXT"),
+                ("or_image_b64_db",      "TEXT"),
+                ("cr_image_b64_db",      "TEXT"),
+            ]
+            for col_name, col_type in new_cols:
+                try:
+                    conn.execute(text(f"ALTER TABLE auth_users ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                    print(f"DATABASE: Added column {col_name} to auth_users.")
+                except Exception:
+                    pass  # Column already exists — safe to ignore
 
         print("DATABASE: Tables initialized successfully.")
     except Exception as e:

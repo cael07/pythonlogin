@@ -60,6 +60,88 @@
         </div>
       </div>
 
+      <!-- Driver Documents Section -->
+      <div v-if="user?.role === 'driver'" class="driver-docs-section glass">
+        <h3 class="token-title">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 15l-3-3 1.41-1.41L10 13.17l7.59-7.59L19 7l-9 9z"/></svg>
+          Verified Driver Credentials
+        </h3>
+        <p class="token-desc">Your uploaded LTO documents and vehicle details are registered below:</p>
+        
+        <div class="docs-grid">
+          <!-- License Card -->
+          <div class="doc-card">
+            <span class="doc-label">Driver's License</span>
+            <div class="doc-img-wrap" @click="openDoc(user.license_image_base64 || `${apiHost}/${user.license_image_path}`)">
+              <img :src="user.license_image_base64 || `${apiHost}/${user.license_image_path}`" alt="Driver's License" class="doc-img" />
+            </div>
+            <div class="doc-details">
+              <div class="doc-detail-item">
+                <span class="doc-detail-lbl">License Number</span>
+                <span class="doc-detail-val">{{ user.license_number }}</span>
+              </div>
+              <div class="doc-detail-item">
+                <span class="doc-detail-lbl">Expiration Date</span>
+                <span class="doc-detail-val">{{ user.license_image_path ? 'Valid' : 'Pending' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- OR Card -->
+          <div class="doc-card">
+            <span class="doc-label">Original Receipt (OR)</span>
+            <div class="doc-img-wrap" @click="openDoc(user.or_image_base64 || `${apiHost}/${user.or_image_path}`)">
+              <img :src="user.or_image_base64 || `${apiHost}/${user.or_image_path}`" alt="Original Receipt" class="doc-img" />
+            </div>
+            <div class="doc-details">
+              <div class="doc-detail-item">
+                <span class="doc-detail-lbl">OR Renewal Date</span>
+                <span class="doc-detail-val">{{ user.or_renewal_date }}</span>
+              </div>
+              <div class="doc-detail-item">
+                <span class="doc-detail-lbl">Status</span>
+                <span class="doc-detail-val text-success">Verified ✓</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- CR Card -->
+          <div class="doc-card">
+            <span class="doc-label">Certificate of Registration</span>
+            <div class="doc-img-wrap" @click="openDoc(user.cr_image_base64 || `${apiHost}/${user.cr_image_path}`)">
+              <img :src="user.cr_image_base64 || `${apiHost}/${user.cr_image_path}`" alt="Certificate of Registration" class="doc-img" />
+            </div>
+            <div class="doc-details">
+              <div class="form-row-2">
+                <div class="doc-detail-item" style="flex: 1;">
+                  <span class="doc-detail-lbl">Plate Number</span>
+                  <span class="doc-detail-val">{{ user.cr_plate_number }}</span>
+                </div>
+                <div class="doc-detail-item" style="flex: 1;">
+                  <span class="doc-detail-lbl">Brand</span>
+                  <span class="doc-detail-val">{{ user.cr_brand }}</span>
+                </div>
+              </div>
+              <div class="form-row-2">
+                <div class="doc-detail-item" style="flex: 1;">
+                  <span class="doc-detail-lbl">Model</span>
+                  <span class="doc-detail-val">{{ user.cr_model }}</span>
+                </div>
+                <div class="doc-detail-item" style="flex: 1;">
+                  <span class="doc-detail-lbl">Color</span>
+                  <span class="doc-detail-val">{{ user.cr_color }}</span>
+                </div>
+              </div>
+              <div class="doc-detail-item">
+                <span class="doc-detail-lbl">Registered Owner</span>
+                <span class="doc-detail-val" style="font-size: 0.72rem; word-break: break-word;">{{ user.cr_owner_name }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
       <!-- App token info -->
       <div class="token-section glass">
         <h3 class="token-title">
@@ -96,11 +178,17 @@ const user   = computed(() => auth.user)
 
 const biometricAvailable = ref(false)
 const fingerprintEnabled = ref(false)
+const apiHost = ref('http://localhost:8000')
 
 onMounted(async () => {
   // Smart host detection: if we are on render, use the render API URL
   const isRender = window.location.hostname.includes('onrender.com')
   const host = import.meta.env.VITE_API_URL || (isRender ? 'https://pythonlogin-api.onrender.com' : 'http://localhost:8000')
+  
+  apiHost.value = host
+  if (apiHost.value.endsWith('/auth')) {
+    apiHost.value = apiHost.value.substring(0, apiHost.value.length - 5)
+  }
   
   console.log("DEBUG: Current User Data ->", user.value)
   if (user.value?.username) {
@@ -116,6 +204,7 @@ onMounted(async () => {
     }
   } catch (e) {}
 })
+
 
 const initials = computed(() => {
   if (!user.value?.full_name) return '?'
@@ -164,6 +253,12 @@ async function setupFingerprint() {
 function handleLogout() {
   auth.logout()
   router.push('/login')
+}
+
+function openDoc(url) {
+  if (url) {
+    window.open(url, '_blank')
+  }
 }
 </script>
 
@@ -341,6 +436,124 @@ function handleLogout() {
 .dash-footer a { color: var(--primary-light); text-decoration: none; }
 .dash-footer a:hover { color: var(--text-1); }
 
+/* Driver Documents Section Styling */
+.driver-docs-section {
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.docs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.doc-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+}
+
+.doc-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.doc-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--primary-light);
+  letter-spacing: 0.5px;
+}
+
+.doc-img-wrap {
+  width: 100%;
+  aspect-ratio: 16/10;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  position: relative;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.doc-img-wrap::after {
+  content: '🔍 View Document';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.doc-img-wrap:hover::after {
+  opacity: 1;
+}
+
+.doc-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.doc-img-wrap:hover .doc-img {
+  transform: scale(1.05);
+}
+
+.doc-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.doc-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+}
+
+.doc-detail-lbl {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+}
+
+.doc-detail-val {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.form-row-2 {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.text-success {
+  color: var(--success);
+}
+
 @media (max-width: 640px) {
   .dash-wrap {
     padding: 1.5rem;
@@ -371,6 +584,9 @@ function handleLogout() {
   }
   .dash-title {
     font-size: 1.2rem;
+  }
+  .docs-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

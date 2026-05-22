@@ -10,6 +10,13 @@ class UserRegister(BaseModel):
     password: str
     confirm_password: str
     role: Optional[str] = "passenger"
+    license_number: Optional[str] = None
+    or_renewal_date: Optional[str] = None
+    cr_plate_number: Optional[str] = None
+    cr_brand: Optional[str] = None
+    cr_color: Optional[str] = None
+    cr_model: Optional[str] = None
+    cr_owner_name: Optional[str] = None
 
     @field_validator("confirm_password")
     @classmethod
@@ -30,7 +37,10 @@ class UserRegister(BaseModel):
 
 class RegisterRequest(BaseModel):
     user: UserRegister
-    face_image: Optional[str] = None   # base64 data-URL from camera
+    face_image: Optional[str] = None    # base64 data-URL from camera
+    license_image: Optional[str] = None # base64 data-URL
+    or_image: Optional[str] = None      # base64 data-URL
+    cr_image: Optional[str] = None      # base64 data-URL
     app_id: Optional[str] = None
 
 
@@ -46,10 +56,27 @@ class UserOut(BaseModel):
     username: str
     email: str
     face_image_path: str | None = None
-    face_image_base64: str | None = None
     is_active: bool
     role: str
     created_at: datetime
+
+    # Driver documents metadata
+    license_number: str | None = None
+    license_image_path: str | None = None
+    or_renewal_date: str | None = None
+    or_image_path: str | None = None
+    cr_plate_number: str | None = None
+    cr_brand: str | None = None
+    cr_color: str | None = None
+    cr_model: str | None = None
+    cr_owner_name: str | None = None
+    cr_image_path: str | None = None
+
+    # Base64 images returned to frontend (sourced from *_b64_db DB columns via router)
+    face_image_base64: str | None = None
+    license_image_base64: str | None = None
+    or_image_base64: str | None = None
+    cr_image_base64: str | None = None
 
     model_config = {"from_attributes": True}
 
