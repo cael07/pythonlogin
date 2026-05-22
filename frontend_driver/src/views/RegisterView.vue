@@ -75,12 +75,10 @@
             </div>
 
             <!-- Live Camera Capture -->
-            <div v-else class="camera-capture-box">
-              <div class="video-container">
-                <video ref="docVideoEl" class="doc-video" autoplay muted playsinline></video>
-                <div class="camera-guideline-rect"></div>
-              </div>
-              <button class="btn btn-primary btn-capture" @click="capturePhoto('license')">📸 Capture Document</button>
+            <div v-else class="camera-placeholder-box" @click="openCameraModal('license')">
+              <div class="camera-placeholder-icon">📸</div>
+              <p class="camera-placeholder-text">Launch Fullscreen Scanner</p>
+              <span class="camera-placeholder-subtext">Tap to open viewfinder & capture license</span>
             </div>
           </div>
 
@@ -139,12 +137,10 @@
             </div>
 
             <!-- Live Camera Capture -->
-            <div v-else class="camera-capture-box">
-              <div class="video-container">
-                <video ref="docVideoEl" class="doc-video" autoplay muted playsinline></video>
-                <div class="camera-guideline-rect"></div>
-              </div>
-              <button class="btn btn-primary btn-capture" @click="capturePhoto('or')">📸 Capture Document</button>
+            <div v-else class="camera-placeholder-box" @click="openCameraModal('or')">
+              <div class="camera-placeholder-icon">📸</div>
+              <p class="camera-placeholder-text">Launch Fullscreen Scanner</p>
+              <span class="camera-placeholder-subtext">Tap to open viewfinder & capture receipt</span>
             </div>
           </div>
 
@@ -195,12 +191,10 @@
             </div>
 
             <!-- Live Camera Capture -->
-            <div v-else class="camera-capture-box">
-              <div class="video-container">
-                <video ref="docVideoEl" class="doc-video" autoplay muted playsinline></video>
-                <div class="camera-guideline-rect"></div>
-              </div>
-              <button class="btn btn-primary btn-capture" @click="capturePhoto('cr')">📸 Capture Document</button>
+            <div v-else class="camera-placeholder-box" @click="openCameraModal('cr')">
+              <div class="camera-placeholder-icon">📸</div>
+              <p class="camera-placeholder-text">Launch Fullscreen Scanner</p>
+              <span class="camera-placeholder-subtext">Tap to open viewfinder & capture ownership details</span>
             </div>
           </div>
 
@@ -267,6 +261,37 @@
       </div>
     </div>
   </div>
+
+  <!-- Fullscreen Document Scanner Modal -->
+  <Transition name="fade">
+    <div v-if="showCameraModal" class="camera-modal-overlay">
+      <div class="camera-modal-content">
+        <!-- Header -->
+        <div class="camera-modal-header">
+          <h3 class="camera-modal-title">Position Your Document</h3>
+          <button class="camera-modal-close" @click="closeCameraModal">✕</button>
+        </div>
+
+        <!-- Viewfinder -->
+        <div class="camera-modal-viewfinder">
+          <video ref="modalVideoEl" class="modal-video" autoplay muted playsinline></video>
+          <div class="camera-modal-guideline">
+            <div class="camera-modal-guideline-rect">
+              <span class="guideline-text">ALIGN DOCUMENT EDGES</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer Controls -->
+        <div class="camera-modal-controls">
+          <button class="btn btn-ghost modal-btn-cancel" @click="closeCameraModal">Cancel</button>
+          <button class="btn btn-primary modal-btn-capture" @click="capturePhotoFromModal">
+            📸 Capture Document
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
 </template>
 
 <script setup>
@@ -288,7 +313,9 @@ const error     = ref('')
 
 // Camera states and refs
 const activeMode = ref('upload')
-const docVideoEl = ref(null)
+const showCameraModal = ref(false)
+const modalVideoEl = ref(null)
+const activeCaptureType = ref('') // 'license', 'or', 'cr'
 let cameraStream = null
 
 // Document base64 states
@@ -325,29 +352,39 @@ const loadTesseract = () => {
   })
 }
 
-async function startDocCamera() {
+async function openCameraModal(docType) {
+  activeCaptureType.value = docType
+  showCameraModal.value = true
+  
   stopDocCamera()
   try {
     const constraints = {
       video: {
         facingMode: 'environment',
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
       },
       audio: false
     }
     const stream = await navigator.mediaDevices.getUserMedia(constraints)
     cameraStream = stream
     setTimeout(() => {
-      if (docVideoEl.value) {
-        docVideoEl.value.srcObject = stream
+      if (modalVideoEl.value) {
+        modalVideoEl.value.srcObject = stream
       }
-    }, 100)
+    }, 150)
   } catch (err) {
     console.error("Error accessing camera:", err)
     error.value = "Unable to access camera. Please allow camera permissions or use Upload mode."
-    activeMode.value = 'upload'
+    closeCameraModal()
   }
+}
+
+function closeCameraModal() {
+  stopDocCamera()
+  showCameraModal.value = false
+  activeCaptureType.value = ''
+  activeMode.value = 'upload'
 }
 
 function stopDocCamera() {
@@ -355,31 +392,35 @@ function stopDocCamera() {
     cameraStream.getTracks().forEach(track => track.stop())
     cameraStream = null
   }
-  if (docVideoEl.value) {
-    docVideoEl.value.srcObject = null
+  if (modalVideoEl.value) {
+    modalVideoEl.value.srcObject = null
   }
 }
 
 function switchMode(mode) {
   activeMode.value = mode
   if (mode === 'camera') {
-    startDocCamera()
+    let docType = 'license'
+    if (step.value === 3) docType = 'or'
+    else if (step.value === 4) docType = 'cr'
+    openCameraModal(docType)
   } else {
-    stopDocCamera()
+    closeCameraModal()
   }
 }
 
-async function capturePhoto(docType) {
-  if (!docVideoEl.value || !cameraStream) return
-  const video = docVideoEl.value
+async function capturePhotoFromModal() {
+  if (!modalVideoEl.value || !cameraStream) return
+  const video = modalVideoEl.value
   const canvas = document.createElement('canvas')
-  canvas.width = video.videoWidth || 1280
-  canvas.height = video.videoHeight || 720
+  canvas.width = video.videoWidth || 1920
+  canvas.height = video.videoHeight || 1080
   const ctx = canvas.getContext('2d')
   if (ctx) {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     const base64 = canvas.toDataURL('image/jpeg', 0.95)
     
+    const docType = activeCaptureType.value
     if (docType === 'license') {
       licenseImage.value = base64
     } else if (docType === 'or') {
@@ -388,14 +429,13 @@ async function capturePhoto(docType) {
       crImage.value = base64
     }
     
-    stopDocCamera()
-    activeMode.value = 'upload'
+    closeCameraModal()
     await runOCR(base64, docType)
   }
 }
 
 function goToStep(nextStep) {
-  stopDocCamera()
+  closeCameraModal()
   activeMode.value = 'upload'
   step.value = nextStep
 }
@@ -853,67 +893,186 @@ async function handleRegister(formData) {
   box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
 }
 
-/* Camera Capture Box */
-.camera-capture-box {
+/* Fullscreen Camera Modal */
+.camera-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 11, 15, 0.96);
+  backdrop-filter: blur(12px);
+  z-index: 9999;
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  justify-content: center;
   align-items: center;
 }
 
-.video-container {
-  position: relative;
+.camera-modal-content {
   width: 100%;
-  aspect-ratio: 16 / 10;
-  background: #000;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
 }
 
-.doc-video {
+.camera-modal-header {
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 21, 28, 0.5);
+}
+
+.camera-modal-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.camera-modal-close {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.camera-modal-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: rotate(90deg);
+}
+
+.camera-modal-viewfinder {
+  position: relative;
+  flex: 1;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.camera-guideline-rect {
+.camera-modal-guideline {
   position: absolute;
-  top: 10%;
-  left: 10%;
-  right: 10%;
-  bottom: 10%;
-  border: 2px dashed rgba(255, 255, 255, 0.5);
-  border-radius: var(--radius-md);
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   pointer-events: none;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
-  transition: border-color 0.3s;
+  background: radial-gradient(circle, transparent 40%, rgba(0, 0, 0, 0.7) 70%);
 }
 
-.camera-guideline-rect::before {
-  content: 'POSITION DOCUMENT HERE';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.15em;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+.camera-modal-guideline-rect {
+  width: 88%;
+  max-width: 480px;
+  aspect-ratio: 1.58;
+  border: 2px dashed rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4), 0 0 15px rgba(99, 102, 241, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
 }
 
-.camera-capture-box:hover .camera-guideline-rect {
+.camera-modal-viewfinder:hover .camera-modal-guideline-rect {
   border-color: var(--primary-light);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4), 0 0 25px rgba(99, 102, 241, 0.7);
 }
 
-.btn-capture {
-  width: 100%;
-  padding: 0.85rem;
+.guideline-text {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-align: center;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+
+.camera-modal-controls {
+  padding: 1.5rem;
+  display: flex;
+  gap: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 21, 28, 0.8);
+}
+
+.camera-modal-controls .btn {
+  flex: 1;
+  padding: 0.95rem;
+  font-size: 1rem;
+}
+
+.modal-btn-cancel {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-2);
+}
+
+.modal-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.modal-btn-capture {
   font-weight: 600;
-  letter-spacing: 0.05em;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+}
+
+/* Camera Placeholder Box */
+.camera-placeholder-box {
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.camera-placeholder-box:hover {
+  border-color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.camera-placeholder-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.25rem;
+  transition: transform 0.2s;
+}
+
+.camera-placeholder-box:hover .camera-placeholder-icon {
+  transform: scale(1.1);
+}
+
+.camera-placeholder-text {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-1);
+}
+
+.camera-placeholder-subtext {
+  font-size: 0.78rem;
+  color: var(--text-3);
 }
 </style>
 
