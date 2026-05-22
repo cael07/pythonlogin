@@ -5,7 +5,7 @@ import json
 from typing import Dict, List, Optional
 from ..database import get_db
 from ..auth.models import Booking, User
-from ..auth.service import get_user_by_id, get_image_base64
+from ..auth.service import get_user_by_id
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/ride", tags=["Ride"])
