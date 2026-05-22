@@ -60,11 +60,28 @@
           <h3 class="step-title-inner">Upload Driver's License</h3>
           <p class="step-desc-inner">Scan or upload your official Philippine Driver's License.</p>
           
-          <div v-if="!licenseImage" class="upload-dropzone" @click="$refs.licenseInput.click()">
-            <input type="file" ref="licenseInput" accept="image/*" class="d-none" @change="onFileChange($event, 'license')" />
-            <div class="upload-icon">🪪</div>
-            <p class="upload-text">Click to choose image or drag & drop</p>
-            <span class="upload-subtext">JPEG or PNG format supported</span>
+          <div v-if="!licenseImage" class="mode-selector-tabs">
+            <button :class="['tab-btn', activeMode === 'upload' ? 'active' : '']" @click="switchMode('upload')">📁 Upload File</button>
+            <button :class="['tab-btn', activeMode === 'camera' ? 'active' : '']" @click="switchMode('camera')">📸 Take Photo</button>
+          </div>
+
+          <div v-if="!licenseImage" style="margin-top: 1rem;">
+            <!-- Upload Dropzone -->
+            <div v-if="activeMode === 'upload'" class="upload-dropzone" @click="$refs.licenseInput.click()">
+              <input type="file" ref="licenseInput" accept="image/*" class="d-none" @change="onFileChange($event, 'license')" />
+              <div class="upload-icon">🪪</div>
+              <p class="upload-text">Click to choose image or drag & drop</p>
+              <span class="upload-subtext">JPEG or PNG format supported</span>
+            </div>
+
+            <!-- Live Camera Capture -->
+            <div v-else class="camera-capture-box">
+              <div class="video-container">
+                <video ref="docVideoEl" class="doc-video" autoplay muted playsinline></video>
+                <div class="camera-guideline-rect"></div>
+              </div>
+              <button class="btn btn-primary btn-capture" @click="capturePhoto('license')">📸 Capture Document</button>
+            </div>
           </div>
 
           <div v-else class="preview-box">
@@ -94,7 +111,7 @@
             <div class="btn-row">
               <button class="btn btn-ghost" @click="licenseImage = null">❌ Clear & Retake</button>
               <button class="btn btn-outline" @click="fillDemoData('license')">🪄 Prefill Demo</button>
-              <button class="btn btn-success" :disabled="!licenseNumber || !licenseName" @click="step = 3">Next Step ➔</button>
+              <button class="btn btn-success" :disabled="!licenseNumber || !licenseName" @click="goToStep(3)">Next Step ➔</button>
             </div>
           </div>
         </div>
@@ -102,16 +119,33 @@
         <!-- Step 3: Original Receipt (OR) Upload + OCR -->
         <div v-if="step === 3" class="doc-upload-container">
           <div class="step-header-row">
-            <button class="btn-back-arrow" @click="step = 2">←</button>
+            <button class="btn-back-arrow" @click="goToStep(2)">←</button>
             <h3 class="step-title-inner">Upload Original Receipt (OR)</h3>
           </div>
           <p class="step-desc-inner">Scan or upload your vehicle's LTO Original Receipt to verify renewal date.</p>
           
-          <div v-if="!orImage" class="upload-dropzone" @click="$refs.orInput.click()">
-            <input type="file" ref="orInput" accept="image/*" class="d-none" @change="onFileChange($event, 'or')" />
-            <div class="upload-icon">🧾</div>
-            <p class="upload-text">Click to choose image or drag & drop</p>
-            <span class="upload-subtext">JPEG or PNG format supported</span>
+          <div v-if="!orImage" class="mode-selector-tabs">
+            <button :class="['tab-btn', activeMode === 'upload' ? 'active' : '']" @click="switchMode('upload')">📁 Upload File</button>
+            <button :class="['tab-btn', activeMode === 'camera' ? 'active' : '']" @click="switchMode('camera')">📸 Take Photo</button>
+          </div>
+
+          <div v-if="!orImage" style="margin-top: 1rem;">
+            <!-- Upload Dropzone -->
+            <div v-if="activeMode === 'upload'" class="upload-dropzone" @click="$refs.orInput.click()">
+              <input type="file" ref="orInput" accept="image/*" class="d-none" @change="onFileChange($event, 'or')" />
+              <div class="upload-icon">🧾</div>
+              <p class="upload-text">Click to choose image or drag & drop</p>
+              <span class="upload-subtext">JPEG or PNG format supported</span>
+            </div>
+
+            <!-- Live Camera Capture -->
+            <div v-else class="camera-capture-box">
+              <div class="video-container">
+                <video ref="docVideoEl" class="doc-video" autoplay muted playsinline></video>
+                <div class="camera-guideline-rect"></div>
+              </div>
+              <button class="btn btn-primary btn-capture" @click="capturePhoto('or')">📸 Capture Document</button>
+            </div>
           </div>
 
           <div v-else class="preview-box">
@@ -133,7 +167,7 @@
             <div class="btn-row">
               <button class="btn btn-ghost" @click="orImage = null">❌ Clear & Retake</button>
               <button class="btn btn-outline" @click="fillDemoData('or')">🪄 Prefill Demo</button>
-              <button class="btn btn-success" :disabled="!orRenewalDate" @click="step = 4">Next Step ➔</button>
+              <button class="btn btn-success" :disabled="!orRenewalDate" @click="goToStep(4)">Next Step ➔</button>
             </div>
           </div>
         </div>
@@ -141,16 +175,33 @@
         <!-- Step 4: Certificate of Registration (CR) Upload + OCR -->
         <div v-if="step === 4" class="doc-upload-container">
           <div class="step-header-row">
-            <button class="btn-back-arrow" @click="step = 3">←</button>
+            <button class="btn-back-arrow" @click="goToStep(3)">←</button>
             <h3 class="step-title-inner">Upload Certificate of Registration (CR)</h3>
           </div>
           <p class="step-desc-inner">Scan or upload your LTO Certificate of Registration to verify vehicle ownership.</p>
           
-          <div v-if="!crImage" class="upload-dropzone" @click="$refs.crInput.click()">
-            <input type="file" ref="crInput" accept="image/*" class="d-none" @change="onFileChange($event, 'cr')" />
-            <div class="upload-icon">🏍️</div>
-            <p class="upload-text">Click to choose image or drag & drop</p>
-            <span class="upload-subtext">JPEG or PNG format supported</span>
+          <div v-if="!crImage" class="mode-selector-tabs">
+            <button :class="['tab-btn', activeMode === 'upload' ? 'active' : '']" @click="switchMode('upload')">📁 Upload File</button>
+            <button :class="['tab-btn', activeMode === 'camera' ? 'active' : '']" @click="switchMode('camera')">📸 Take Photo</button>
+          </div>
+
+          <div v-if="!crImage" style="margin-top: 1rem;">
+            <!-- Upload Dropzone -->
+            <div v-if="activeMode === 'upload'" class="upload-dropzone" @click="$refs.crInput.click()">
+              <input type="file" ref="crInput" accept="image/*" class="d-none" @change="onFileChange($event, 'cr')" />
+              <div class="upload-icon">🏍️</div>
+              <p class="upload-text">Click to choose image or drag & drop</p>
+              <span class="upload-subtext">JPEG or PNG format supported</span>
+            </div>
+
+            <!-- Live Camera Capture -->
+            <div v-else class="camera-capture-box">
+              <div class="video-container">
+                <video ref="docVideoEl" class="doc-video" autoplay muted playsinline></video>
+                <div class="camera-guideline-rect"></div>
+              </div>
+              <button class="btn btn-primary btn-capture" @click="capturePhoto('cr')">📸 Capture Document</button>
+            </div>
           </div>
 
           <div v-else class="preview-box">
@@ -192,7 +243,7 @@
             <div class="btn-row">
               <button class="btn btn-ghost" @click="crImage = null">❌ Clear & Retake</button>
               <button class="btn btn-outline" @click="fillDemoData('cr')">🪄 Prefill Demo</button>
-              <button class="btn btn-success" :disabled="!crPlate || !crBrand || !crOwnerName" @click="step = 5">Next Step ➔</button>
+              <button class="btn btn-success" :disabled="!crPlate || !crBrand || !crOwnerName" @click="goToStep(5)">Next Step ➔</button>
             </div>
           </div>
         </div>
@@ -219,7 +270,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import FaceCapture from '../components/FaceCapture.vue'
@@ -234,6 +285,11 @@ const step      = ref(1)
 const faceImage = ref(null)
 const loading   = ref(false)
 const error     = ref('')
+
+// Camera states and refs
+const activeMode = ref('upload')
+const docVideoEl = ref(null)
+let cameraStream = null
 
 // Document base64 states
 const licenseImage = ref(null)
@@ -269,9 +325,88 @@ const loadTesseract = () => {
   })
 }
 
+async function startDocCamera() {
+  stopDocCamera()
+  try {
+    const constraints = {
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    }
+    const stream = await navigator.mediaDevices.getUserMedia(constraints)
+    cameraStream = stream
+    setTimeout(() => {
+      if (docVideoEl.value) {
+        docVideoEl.value.srcObject = stream
+      }
+    }, 100)
+  } catch (err) {
+    console.error("Error accessing camera:", err)
+    error.value = "Unable to access camera. Please allow camera permissions or use Upload mode."
+    activeMode.value = 'upload'
+  }
+}
+
+function stopDocCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop())
+    cameraStream = null
+  }
+  if (docVideoEl.value) {
+    docVideoEl.value.srcObject = null
+  }
+}
+
+function switchMode(mode) {
+  activeMode.value = mode
+  if (mode === 'camera') {
+    startDocCamera()
+  } else {
+    stopDocCamera()
+  }
+}
+
+async function capturePhoto(docType) {
+  if (!docVideoEl.value || !cameraStream) return
+  const video = docVideoEl.value
+  const canvas = document.createElement('canvas')
+  canvas.width = video.videoWidth || 1280
+  canvas.height = video.videoHeight || 720
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const base64 = canvas.toDataURL('image/jpeg', 0.95)
+    
+    if (docType === 'license') {
+      licenseImage.value = base64
+    } else if (docType === 'or') {
+      orImage.value = base64
+    } else if (docType === 'cr') {
+      crImage.value = base64
+    }
+    
+    stopDocCamera()
+    activeMode.value = 'upload'
+    await runOCR(base64, docType)
+  }
+}
+
+function goToStep(nextStep) {
+  stopDocCamera()
+  activeMode.value = 'upload'
+  step.value = nextStep
+}
+
+onUnmounted(() => {
+  stopDocCamera()
+})
+
 function onFaceCaptured(base64) {
   faceImage.value = base64
-  step.value = 2
+  goToStep(2)
 }
 
 function retake() {
@@ -279,7 +414,7 @@ function retake() {
   licenseImage.value = null
   orImage.value = null
   crImage.value = null
-  step.value = 1
+  goToStep(1)
   error.value = ''
 }
 
@@ -677,6 +812,108 @@ async function handleRegister(formData) {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Mode Selector Tabs */
+.mode-selector-tabs {
+  display: flex;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 0.25rem;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.tab-btn:hover {
+  color: var(--text-1);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+  color: #fff;
+  background: var(--primary);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+}
+
+/* Camera Capture Box */
+.camera-capture-box {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+.video-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: #000;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.doc-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-guideline-rect {
+  position: absolute;
+  top: 10%;
+  left: 10%;
+  right: 10%;
+  bottom: 10%;
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-md);
+  pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.3s;
+}
+
+.camera-guideline-rect::before {
+  content: 'POSITION DOCUMENT HERE';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.camera-capture-box:hover .camera-guideline-rect {
+  border-color: var(--primary-light);
+}
+
+.btn-capture {
+  width: 100%;
+  padding: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
 }
 </style>
 
