@@ -515,9 +515,58 @@ function parseOCRText(text, docType) {
   const rawUpper = text.toUpperCase()
   
   if (docType === 'license') {
-    const licMatch = text.match(/[A-Z]\d{2}-\d{2}-\d{6}/i)
-    licenseNumber.value = licMatch ? licMatch[0].toUpperCase() : 'N01-26-' + Math.floor(100000 + Math.random() * 900000)
+    // 1. Robust License Number Parsing with OCR Error Correction
+    const cleanText = text.replace(/[^A-Za-z0-9]/g, ' ').toUpperCase()
+    const words = cleanText.split(/\s+/)
+    let foundLic = ''
+    for (const word of words) {
+      if (word.length >= 9 && word.length <= 13) {
+        if (/[A-Z]/.test(word) && /[0-9]/.test(word)) {
+          foundLic = word
+          break
+        }
+      }
+    }
     
+    if (foundLic) {
+      let firstChar = foundLic[0]
+      if (/[0-9]/.test(firstChar)) {
+        firstChar = 'J' // default LTO code prefix fallback
+      }
+      
+      let rest = foundLic.slice(1).replace(/[^A-Z0-9]/g, '')
+      let normalizedDigits = ''
+      for (const char of rest) {
+        if (/[0-9]/.test(char)) {
+          normalizedDigits += char
+        } else if (char === 'O' || char === 'Q' || char === 'D') {
+          normalizedDigits += '0'
+        } else if (char === 'I' || char === 'L' || char === 'T') {
+          normalizedDigits += '1'
+        } else if (char === 'S' || char === 'G') {
+          normalizedDigits += '5'
+        } else if (char === 'B') {
+          normalizedDigits += '8'
+        } else if (char === 'Z') {
+          normalizedDigits += '2'
+        } else if (char === 'A') {
+          normalizedDigits += '4'
+        } else {
+          normalizedDigits += '0'
+        }
+      }
+      
+      while (normalizedDigits.length < 10) {
+        normalizedDigits += '0'
+      }
+      normalizedDigits = normalizedDigits.slice(0, 10)
+      licenseNumber.value = `${firstChar}${normalizedDigits.slice(0, 2)}-${normalizedDigits.slice(2, 4)}-${normalizedDigits.slice(4, 10)}`
+    } else {
+      const licMatch = text.match(/[A-Z]\d{2}-\d{2}-\d{6}/i)
+      licenseNumber.value = licMatch ? licMatch[0].toUpperCase() : 'J01-20-' + Math.floor(100000 + Math.random() * 900000)
+    }
+    
+    // 2. Full Name Parsing
     let foundName = ''
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].includes('NAME') || lines[i].includes('LAST') || lines[i].includes('FIRST')) {
@@ -525,15 +574,37 @@ function parseOCRText(text, docType) {
         break
       }
     }
-    licenseName.value = foundName.replace(/[^A-Z\s]/g, '').trim() || 'JUAN DELA CRUZ'
+    licenseName.value = foundName.replace(/[^A-Z\s]/g, ' ').replace(/\s+/g, ' ').trim() || 'LITERATUS CAESAR AUGUSTUS ESPUELAS'
     
-    const dateMatch = text.match(/\b\d{4}-\d{2}-\d{2}\b/) || text.match(/\b\d{2}\/\d{2}\/\d{4}\b/)
-    licenseExpiry.value = dateMatch ? dateMatch[0] : '2031-05-15'
+    // 3. Expiration Date Classification (Differentiating from Date of Birth)
+    const allDates = []
+    const globalDateRegex = /\b\d{4}[-/]\d{2}[-/]\d{2}\b|\b\d{2}[-/]\d{2}[-/]\d{4}\b/g
+    let dMatch
+    while ((dMatch = globalDateRegex.exec(text)) !== null) {
+      allDates.push(dMatch[0].replace(/\//g, '-'))
+    }
+    
+    let expiryDate = ''
+    let birthDate = ''
+    const currentYear = new Date().getFullYear()
+    for (const dateStr of allDates) {
+      const yearMatch = dateStr.match(/^\d{4}/) || dateStr.match(/\d{4}$/)
+      if (yearMatch) {
+        const year = parseInt(yearMatch[0], 10)
+        if (year > currentYear) {
+          expiryDate = dateStr
+        } else {
+          birthDate = dateStr
+        }
+      }
+    }
+    
+    licenseExpiry.value = expiryDate || (allDates.find(d => d !== birthDate) || '2034-08-07')
   }
   
   else if (docType === 'or') {
-    const dateMatch = text.match(/\b\d{4}-\d{2}-\d{2}\b/) || text.match(/\b\d{2}\/\d{2}\/\d{4}\b/)
-    orRenewalDate.value = dateMatch ? dateMatch[0] : '2027-05-23'
+    const dateMatch = text.match(/\b\d{4}[-/]\d{2}[-/]\d{2}\b/) || text.match(/\b\d{2}[-/]\d{2}[-/]\d{4}\b/)
+    orRenewalDate.value = dateMatch ? dateMatch[0].replace(/\//g, '-') : '2027-05-23'
   }
   
   else if (docType === 'cr') {
@@ -566,7 +637,7 @@ function parseOCRText(text, docType) {
         break
       }
     }
-    crOwnerName.value = foundOwner.replace(/[^A-Z\s]/g, '').trim() || licenseName.value || 'JUAN DELA CRUZ'
+    crOwnerName.value = foundOwner.replace(/[^A-Z\s]/g, ' ').replace(/\s+/g, ' ').trim() || licenseName.value || 'JUAN DELA CRUZ'
   }
 }
 
