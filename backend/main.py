@@ -103,26 +103,25 @@ async def root():
     }
 
 
-# ── Offline Local OCR Endpoint using EasyOCR ─────────────────────────────────
-# Processes the image locally using a deep-learning EasyOCR pipeline.
-# Fully standalone, runs 100% offline, and requires no API keys.
+# ── Offline Local OCR Endpoint using RapidOCR ────────────────────────────────
+# Processes the image locally using the memory-optimized RapidOCR ONNX pipeline.
+# Fully standalone, runs 100% offline, and uses very little memory (< 100MB RAM).
 
 import base64
 import io
 import numpy as np
 from PIL import Image
-import easyocr
+from rapidocr_onnxruntime import RapidOCR
 from pydantic import BaseModel
 
-# Global EasyOCR Reader instance (initialized lazily to speed up startup)
-_ocr_reader = None
+# Global RapidOCR instance (initialized lazily to speed up startup)
+_ocr_engine = None
 
-def get_ocr_reader():
-    global _ocr_reader
-    if _ocr_reader is None:
-        # Load reader for English on CPU (gpu=False)
-        _ocr_reader = easyocr.Reader(['en'], gpu=False)
-    return _ocr_reader
+def get_ocr_engine():
+    global _ocr_engine
+    if _ocr_engine is None:
+        _ocr_engine = RapidOCR()
+    return _ocr_engine
 
 class OCRRequest(BaseModel):
     image_base64: str   # full data-URL or raw base64
@@ -142,19 +141,22 @@ async def ocr_document(body: OCRRequest):
         # Load image via Pillow and convert to RGB
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         
-        # Convert to numpy array as expected by EasyOCR
+        # Convert to numpy array as expected by RapidOCR
         img_np = np.array(img)
         
-        # Get/initialize offline reader
-        reader = get_ocr_reader()
+        # Get/initialize offline RapidOCR engine
+        engine = get_ocr_engine()
         
         # Run local offline OCR detection and recognition
-        # readtext returns: [(bbox, text, confidence), ...]
-        results = reader.readtext(img_np)
+        # result is: [[bbox, text, confidence], ...] or None
+        result, elapse = engine(img_np)
         
-        # Join extracted text segments with newlines
-        extracted_text = "\n".join([res[1] for res in results])
-        
+        # Extract and join text segments with newlines
+        if result:
+            extracted_text = "\n".join([item[1] for item in result])
+        else:
+            extracted_text = ""
+            
     except Exception as e:
         import traceback
         print(f"Offline OCR error:\n{traceback.format_exc()}")
@@ -164,4 +166,5 @@ async def ocr_document(body: OCRRequest):
         )
 
     return {"text": extracted_text, "doc_type": body.doc_type}
+
 

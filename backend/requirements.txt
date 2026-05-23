@@ -11,5 +11,4 @@ python-dotenv
 Pillow
 websockets
 httpx
-easyocr
-
+rapidocr_onnxruntime
