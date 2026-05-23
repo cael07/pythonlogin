@@ -454,29 +454,43 @@ function startDocDetectionLoop() {
       return
     }
 
-    // Sample a small canvas in the guideline zone (center 70% × 55%)
-    const sW = Math.floor(video.videoWidth  * 0.70)
-    const sH = Math.floor(video.videoHeight * 0.55)
-    const sX = Math.floor((video.videoWidth  - sW) / 2)
-    const sY = Math.floor((video.videoHeight - sH) / 2)
-
+    // Draw the ENTIRE video frame to the offscreen canvas to analyze margins vs center
     const offscreen = document.createElement('canvas')
     offscreen.width  = 64
     offscreen.height = 40
     const c = offscreen.getContext('2d')
-    c.drawImage(video, sX, sY, sW, sH, 0, 0, 64, 40)
+    c.drawImage(video, 0, 0, 64, 40)
 
     const pixels = c.getImageData(0, 0, 64, 40).data
-    let brightPx = 0
-    const total = 64 * 40
-    for (let i = 0; i < pixels.length; i += 4) {
-      const brightness = (pixels[i] * 0.299 + pixels[i+1] * 0.587 + pixels[i+2] * 0.114)
-      if (brightness > 160) brightPx++
+    
+    let innerSum = 0
+    let innerCount = 0
+    let outerSum = 0
+    let outerCount = 0
+
+    for (let y = 0; y < 40; y++) {
+      for (let x = 0; x < 64; x++) {
+        const idx = (y * 64 + x) * 4
+        const brightness = (pixels[idx] * 0.299 + pixels[idx+1] * 0.587 + pixels[idx+2] * 0.114)
+        
+        // Define inner region representing the guideline box (x: 16 to 48, y: 10 to 30)
+        const isInner = (x >= 16 && x <= 48 && y >= 10 && y <= 30)
+        if (isInner) {
+          innerSum += brightness
+          innerCount++
+        } else {
+          outerSum += brightness
+          outerCount++
+        }
+      }
     }
 
-    // Document is considered detected when >55% of center pixels are bright
-    const ratio = brightPx / total
-    const detected = ratio > 0.55
+    const innerAvg = innerSum / innerCount
+    const outerAvg = outerSum / outerCount
+
+    // Document is detected when the inner area is bright (white paper/ID card)
+    // and significantly brighter than the outer borders (contrast difference of >20 units)
+    const detected = innerAvg > 120 && (innerAvg - outerAvg) > 20
 
     if (detected) {
       steadyFrames++
@@ -620,20 +634,18 @@ function isDateBeforeToday(dateStr) {
 function verifyDocumentText(text, docType) {
   const upper = text.toUpperCase()
   if (docType === 'license') {
-    // License must contain LICENSE or DRIVER, and NOT RECEIPT or REGISTRATION
-    const hasLicKeywords = upper.includes('LICENSE') || upper.includes('DRIVER') || upper.includes('REPUBLIC')
-    const isOrCr = upper.includes('RECEIPT') || upper.includes('REGISTRATION') || upper.includes('CR NO') || upper.includes('MVUC')
-    return hasLicKeywords && !isOrCr
+    // License must contain LICENSE, LICENCE, DRIVER, LTO, REPUBLIKA, PILIPINAS, or TRANSPORTATION
+    return upper.includes('LICENSE') || upper.includes('LICENCE') || upper.includes('DRIVER') || 
+           upper.includes('REPUBLIC') || upper.includes('PILIPINAS') || upper.includes('LTO') || 
+           upper.includes('PANGALAN') || upper.includes('TRANSPORTATION')
   } else if (docType === 'or') {
-    // Official Receipt must contain RECEIPT or OFFICIAL or PAYMENT, and NOT CERTIFICATE OF REGISTRATION or CHASSIS NO
-    const hasOrKeywords = upper.includes('RECEIPT') || upper.includes('OFFICIAL') || upper.includes('PAYMENT') || upper.includes('NEXT REG') || upper.includes('MVUC')
-    const isCr = upper.includes('CERTIFICATE OF REGISTRATION') || upper.includes('VEHICLE CATEGORY') || upper.includes('CHASSIS NO') || upper.includes('CR NO')
-    return hasOrKeywords && !isCr
+    // Official Receipt must contain RECEIPT, OFFICIAL, PAYMENT, MVUC, or LTO
+    return upper.includes('RECEIPT') || upper.includes('OFFICIAL') || upper.includes('PAYMENT') || 
+           upper.includes('REG') || upper.includes('MVUC') || upper.includes('LTO') || upper.includes('CASHIER')
   } else if (docType === 'cr') {
-    // Certificate of Registration must contain REGISTRATION or CERTIFICATE or CHASSIS NO, and NOT NEXT REG RENEWAL or PAYMENT DETAILS
-    const hasCrKeywords = upper.includes('CERTIFICATE OF REGISTRATION') || upper.includes('CR NO') || (upper.includes('CERTIFICATE') && upper.includes('CHASSIS'))
-    const isOr = upper.includes('NEXT REG RENEWAL') || upper.includes('PAYMENT DETAILS') || upper.includes('MODE OF PAYMENT')
-    return hasCrKeywords && !isOr
+    // Certificate of Registration must contain REGISTRATION, CERTIFICATE, CR NO, CHASSIS, ENGINE, or PLATE
+    return upper.includes('REGISTRATION') || upper.includes('CERTIFICATE') || upper.includes('CR NO') || 
+           upper.includes('CHASSIS') || upper.includes('ENGINE') || upper.includes('PLATE') || upper.includes('LTO')
   }
   return true
 }
