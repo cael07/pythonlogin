@@ -11,4 +11,7 @@ python-dotenv
 Pillow
 websockets
 httpx
+easyocr
+opencv-python-headless
+numpy
 

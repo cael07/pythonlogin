@@ -926,50 +926,88 @@ async function runOCR(fileBase64, docType) {
   error.value = ''
   
   try {
-    const Tesseract = await loadTesseract()
-    ocrStatus.value = 'Calibrating scanner...'
-    
-    const worker = await Tesseract.createWorker('eng')
-    
-    // Configure Tesseract for maximum accuracy on Philippine IDs
-    try {
-      await worker.setParameters({
-        // PSM 6 = Assume a single uniform block of text (best for IDs)
-        tessedit_pageseg_mode: '6',
-        // Tell Tesseract the image is scanned at 300 DPI
-        user_defined_dpi: '300',
-        // Only expect these characters — avoids misreading @#$% etc.
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :',
+    if (docType === 'cr') {
+      // Use backend EasyOCR for CR documents
+      ocrStatus.value = 'Sending to OCR service...'
+      
+      const response = await fetch('https://pythonlogin-api.onrender.com/api/ocr/process-cr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          image_base64: fileBase64,
+          doc_type: 'cr'
+        })
       })
-    } catch (paramErr) {
-      console.warn('Could not set Tesseract params (older build):', paramErr)
-    }
-
-    ocrStatus.value = 'Decoding text on document...'
-    const ret = await worker.recognize(fileBase64)
-    const text = ret.data.text
-    await worker.terminate()
-    
-    console.log(`OCR Raw parsed text for ${docType}:`, text)
-    
-    // Validate document type
-    const isValid = verifyDocumentText(text, docType)
-    if (!isValid) {
-      if (docType === 'license') {
-        licenseImage.value = null
-        error.value = "Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly."
-      } else if (docType === 'or') {
-        orImage.value = null
-        error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
-      } else if (docType === 'cr') {
+      
+      if (!response.ok) {
+        throw new Error(`Backend OCR failed: ${response.statusText}`)
+      }
+      
+      const ocrResult = await response.json()
+      
+      if (!ocrResult.success) {
+        throw new Error(ocrResult.error || 'OCR processing failed')
+      }
+      
+      const text = ocrResult.text
+      console.log(`EasyOCR text for CR:`, text)
+      console.log(`Extracted fields:`, ocrResult.fields)
+      
+      // Validate document type
+      const isValid = verifyDocumentText(text, docType)
+      if (!isValid) {
         crImage.value = null
         error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
+        return
       }
-      return
+      
+      ocrStatus.value = 'Extracting fields...'
+      parseOCRText(text, docType)
+      
+    } else {
+      // Use Tesseract for License and OR documents
+      const Tesseract = await loadTesseract()
+      ocrStatus.value = 'Calibrating scanner...'
+      
+      const worker = await Tesseract.createWorker('eng')
+      
+      // Configure Tesseract for maximum accuracy on Philippine IDs
+      try {
+        await worker.setParameters({
+          tessedit_pageseg_mode: '6',
+          user_defined_dpi: '300',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :',
+        })
+      } catch (paramErr) {
+        console.warn('Could not set Tesseract params (older build):', paramErr)
+      }
+
+      ocrStatus.value = 'Decoding text on document...'
+      const ret = await worker.recognize(fileBase64)
+      const text = ret.data.text
+      await worker.terminate()
+      
+      console.log(`OCR Raw parsed text for ${docType}:`, text)
+      
+      // Validate document type
+      const isValid = verifyDocumentText(text, docType)
+      if (!isValid) {
+        if (docType === 'license') {
+          licenseImage.value = null
+          error.value = "Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly."
+        } else if (docType === 'or') {
+          orImage.value = null
+          error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
+        }
+        return
+      }
+      
+      ocrStatus.value = 'Extracting fields...'
+      parseOCRText(text, docType)
     }
-    
-    ocrStatus.value = 'Extracting fields...'
-    parseOCRText(text, docType)
+
     if (docType === 'license') {
       setTimeout(() => {
         if (licenseNumberInput.value) {
@@ -978,7 +1016,7 @@ async function runOCR(fileBase64, docType) {
       }, 100)
     }
   } catch (err) {
-    console.warn("Tesseract OCR failed, falling back to simulated parser:", err)
+    console.warn("OCR failed, falling back to simulated parser:", err)
     ocrStatus.value = 'Extracting fields (Fallback)...'
     setTimeout(() => {
       generateRealisticFallback(docType)

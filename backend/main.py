@@ -8,6 +8,7 @@ import os
 from .database import init_db
 from .auth.router import router as auth_router
 from .ride.router import router as ride_router
+from .ocr.router import router as ocr_router
 
 
 @asynccontextmanager
@@ -91,6 +92,7 @@ app.mount("/driver_docs", CORSStaticFiles(directory=DRIVER_DIR), name="driver_do
 
 app.include_router(auth_router)
 app.include_router(ride_router)
+app.include_router(ocr_router)
 
 
 
