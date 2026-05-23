@@ -612,9 +612,13 @@ function verifyDocumentText(text, docType) {
     // Just check if DRIVER or LICENSE or REPUBLIC exists anywhere in text (very relaxed regex to tolerate OCR typos)
     return /\b(DRIV|LIC|L1C|DR1V|REPUBL|PILIP)/i.test(text)
   } else if (docType === 'or') {
-    // Official Receipt must contain RECEIPT, OFFICIAL, PAYMENT, MVUC, or LTO
-    return upper.includes('RECEIPT') || upper.includes('OFFICIAL') || upper.includes('PAYMENT') || 
-           upper.includes('REG') || upper.includes('MVUC') || upper.includes('LTO') || upper.includes('CASHIER')
+    // Official Receipt should include RECEIPT and at least one business/receipt indicator.
+    const hasReceipt = upper.includes('RECEIPT')
+    const hasOfficial = upper.includes('OFFICIAL')
+    const hasPayment = upper.includes('PAYMENT')
+    const hasMvuc = upper.includes('MVUC')
+    const hasCashier = upper.includes('CASHIER')
+    return hasReceipt && (hasOfficial || hasPayment || hasMvuc || hasCashier)
   } else if (docType === 'cr') {
     // Certificate of Registration must contain REGISTRATION, CERTIFICATE, CR NO, CHASSIS, ENGINE, or PLATE
     return upper.includes('REGISTRATION') || upper.includes('CERTIFICATE') || upper.includes('CR NO') || 
