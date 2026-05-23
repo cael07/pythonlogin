@@ -496,16 +496,11 @@ function startDocDetectionLoop() {
       steadyFrames++
     } else {
       steadyFrames = 0
-      if (docAligned.value) {
-        // Lost alignment — cancel any running countdown
-        cancelAutoCapture()
-      }
       docAligned.value = false
     }
 
-    if (steadyFrames >= STEADY_NEEDED && !docAligned.value && docCountdown.value === 0) {
+    if (steadyFrames >= STEADY_NEEDED) {
       docAligned.value = true
-      startAutoCapture()
     }
 
     docDetectionRaf = requestAnimationFrame(detect)
@@ -522,28 +517,10 @@ function stopDocDetectionLoop() {
 }
 
 function startAutoCapture() {
-  cancelAutoCapture()
-  docCountdown.value = 3
-
-  countdownInterval = setInterval(() => {
-    docCountdown.value--
-    if (docCountdown.value <= 0) {
-      clearInterval(countdownInterval)
-      countdownInterval = null
-      triggerDocCapture()
-    }
-  }, 1000)
+  // Auto-capture disabled
 }
 
 function cancelAutoCapture() {
-  if (countdownInterval) {
-    clearInterval(countdownInterval)
-    countdownInterval = null
-  }
-  if (autoCaptureTimer) {
-    clearTimeout(autoCaptureTimer)
-    autoCaptureTimer = null
-  }
   docCountdown.value = 0
 }
 
