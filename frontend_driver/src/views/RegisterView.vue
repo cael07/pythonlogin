@@ -547,14 +547,7 @@ async function triggerDocCapture() {
   colorCtx.drawImage(video, 0, 0, w, h)
   const colorBase64 = colorCanvas.toDataURL('image/jpeg', 0.95)
 
-  // --- Canvas 2: High-contrast grayscale ONLY for OCR ---
-  const ocrCanvas = document.createElement('canvas')
-  ocrCanvas.width  = w
-  ocrCanvas.height = h
-  const ocrCtx = ocrCanvas.getContext('2d')
-  try { ocrCtx.filter = 'contrast(1.6) brightness(1.15) grayscale(1) saturate(0)' } catch (_) {}
-  ocrCtx.drawImage(video, 0, 0, w, h)
-  const ocrBase64 = ocrCanvas.toDataURL('image/jpeg', 0.95)
+  const ocrBase64 = await preprocessDocumentImage(colorBase64)
 
   const docType = activeCaptureType.value
   // Store COLOR image for preview
@@ -707,21 +700,224 @@ function onFileChange(event, docType) {
       crImage.value = colorBase64
     }
     
-    // Build an enhanced grayscale version for OCR
-    const img = new Image()
-    img.onload = async () => {
-      const oc = document.createElement('canvas')
-      oc.width  = img.naturalWidth
-      oc.height = img.naturalHeight
-      const octx = oc.getContext('2d')
-      try { octx.filter = 'contrast(1.6) brightness(1.15) grayscale(1) saturate(0)' } catch (_) {}
-      octx.drawImage(img, 0, 0)
-      const ocrBase64 = oc.toDataURL('image/jpeg', 0.95)
-      await runOCR(ocrBase64, docType)
-    }
-    img.src = colorBase64
+      const ocrBase64 = await preprocessDocumentImage(colorBase64)
+    await runOCR(ocrBase64, docType)
   }
   reader.readAsDataURL(file)
+}
+
+async function preprocessDocumentImage(base64) {
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = reject
+    image.src = base64
+  })
+
+  const maxWidth = 1500
+  const width = Math.min(maxWidth, img.naturalWidth)
+  const height = Math.round(img.naturalHeight * (width / img.naturalWidth))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+
+  // Initial contrast/brightness/gray conversion
+  try { ctx.filter = 'contrast(1.4) brightness(1.08) grayscale(1) saturate(0)'; } catch (_) {}
+  ctx.drawImage(img, 0, 0, width, height)
+
+  let imageData = ctx.getImageData(0, 0, width, height)
+  imageData = normalizeImageContrast(imageData)
+  imageData = adaptiveThreshold(imageData, 15, 10)
+  ctx.putImageData(imageData, 0, 0)
+
+  const deskewedCanvas = deskewCanvas(canvas)
+  const deskewedCtx = deskewedCanvas.getContext('2d')
+  imageData = deskewedCtx.getImageData(0, 0, deskewedCanvas.width, deskewedCanvas.height)
+
+  const crop = detectDocumentBounds(imageData)
+  if (crop && crop.width > 100 && crop.height > 100 && crop.width < deskewedCanvas.width && crop.height < deskewedCanvas.height) {
+    const cropCanvas = document.createElement('canvas')
+    cropCanvas.width = crop.width
+    cropCanvas.height = crop.height
+    const cropCtx = cropCanvas.getContext('2d')
+    cropCtx.putImageData(deskewedCtx.getImageData(crop.x, crop.y, crop.width, crop.height), 0, 0)
+    return cropCanvas.toDataURL('image/jpeg', 0.95)
+  }
+
+  return deskewedCanvas.toDataURL('image/jpeg', 0.95)
+}
+
+function deskewCanvas(sourceCanvas) {
+  const angles = []
+  for (let angle = -3.5; angle <= 3.5; angle += 0.5) angles.push(angle)
+  let bestAngle = 0
+  let bestScore = -Infinity
+
+  for (const angle of angles) {
+    const rotated = rotateCanvas(sourceCanvas, angle)
+    const score = scoreDeskew(rotated)
+    if (score > bestScore) {
+      bestScore = score
+      bestAngle = angle
+    }
+  }
+
+  if (Math.abs(bestAngle) < 0.4) {
+    return sourceCanvas
+  }
+
+  return rotateCanvas(sourceCanvas, bestAngle)
+}
+
+function rotateCanvas(sourceCanvas, degrees) {
+  const radians = degrees * Math.PI / 180
+  const sin = Math.abs(Math.sin(radians))
+  const cos = Math.abs(Math.cos(radians))
+  const width = sourceCanvas.width
+  const height = sourceCanvas.height
+  const newWidth = Math.ceil(width * cos + height * sin)
+  const newHeight = Math.ceil(width * sin + height * cos)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = newWidth
+  canvas.height = newHeight
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, newWidth, newHeight)
+  ctx.translate(newWidth / 2, newHeight / 2)
+  ctx.rotate(radians)
+  ctx.drawImage(sourceCanvas, -width / 2, -height / 2)
+  return canvas
+}
+
+function scoreDeskew(canvas) {
+  const width = canvas.width
+  const height = canvas.height
+  const ctx = canvas.getContext('2d')
+  const imageData = ctx.getImageData(0, 0, width, height)
+  const data = imageData.data
+  const counts = new Float32Array(width)
+
+  for (let y = 0; y < height; y += 4) {
+    for (let x = 0; x < width; x += 4) {
+      const idx = (y * width + x) * 4
+      const value = data[idx]
+      if (value < 128) counts[x] += 1
+    }
+  }
+
+  let mean = 0
+  for (let x = 0; x < width; x++) mean += counts[x]
+  mean /= width
+  let variance = 0
+  for (let x = 0; x < width; x++) {
+    const diff = counts[x] - mean
+    variance += diff * diff
+  }
+  return variance / width
+}
+
+function normalizeImageContrast(imageData) {
+  const data = imageData.data
+  let min = 255
+  let max = 0
+
+  for (let i = 0; i < data.length; i += 4) {
+    const value = data[i]
+    if (value < min) min = value
+    if (value > max) max = value
+  }
+
+  const range = Math.max(max - min, 1)
+  const scale = 255 / range
+  for (let i = 0; i < data.length; i += 4) {
+    let v = Math.round((data[i] - min) * scale)
+    v = Math.max(0, Math.min(255, v))
+    data[i] = data[i+1] = data[i+2] = v
+  }
+
+  return imageData
+}
+
+function adaptiveThreshold(imageData, windowSize = 15, offset = 10) {
+  const width = imageData.width
+  const height = imageData.height
+  const data = imageData.data
+  const gray = new Uint8ClampedArray(width * height)
+
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    gray[j] = data[i]
+  }
+
+  const integral = new Uint32Array((width + 1) * (height + 1))
+  for (let y = 1; y <= height; y++) {
+    let rowSum = 0
+    const rowIndex = y * (width + 1)
+    const prevRowIndex = (y - 1) * (width + 1)
+    for (let x = 1; x <= width; x++) {
+      rowSum += gray[(y - 1) * width + (x - 1)]
+      integral[rowIndex + x] = integral[prevRowIndex + x] + rowSum
+    }
+  }
+
+  const half = Math.floor(windowSize / 2)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const x1 = Math.max(0, x - half)
+      const y1 = Math.max(0, y - half)
+      const x2 = Math.min(width - 1, x + half)
+      const y2 = Math.min(height - 1, y + half)
+      const count = (x2 - x1 + 1) * (y2 - y1 + 1)
+      const sum = integral[(y2 + 1) * (width + 1) + (x2 + 1)]
+                - integral[(y1) * (width + 1) + (x2 + 1)]
+                - integral[(y2 + 1) * (width + 1) + (x1)]
+                + integral[(y1) * (width + 1) + (x1)]
+      const threshold = sum / count - offset
+      const i = y * width + x
+      const value = gray[i] < threshold ? 0 : 255
+      data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = value
+      data[i * 4 + 3] = 255
+    }
+  }
+
+  return imageData
+}
+
+function detectDocumentBounds(imageData) {
+  const width = imageData.width
+  const height = imageData.height
+  const data = imageData.data
+  const threshold = 220
+  let top = 0, bottom = height - 1, left = 0, right = width - 1
+
+  const rowIsBlank = (y) => {
+    let count = 0
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4] < threshold) count++
+    }
+    return count < width * 0.02
+  }
+  const colIsBlank = (x) => {
+    let count = 0
+    for (let y = 0; y < height; y++) {
+      if (data[(y * width + x) * 4] < threshold) count++
+    }
+    return count < height * 0.02
+  }
+
+  while (top < bottom && rowIsBlank(top)) top++
+  while (bottom > top && rowIsBlank(bottom)) bottom--
+  while (left < right && colIsBlank(left)) left++
+  while (right > left && colIsBlank(right)) right--
+
+  const padding = 16
+  return {
+    x: Math.max(0, left - padding),
+    y: Math.max(0, top - padding),
+    width: Math.min(width - left + padding * 2, right - left + padding),
+    height: Math.min(height - top + padding * 2, bottom - top + padding),
+  }
 }
 
 async function runOCR(fileBase64, docType) {
@@ -975,36 +1171,54 @@ function parseOCRText(text, docType) {
   }
   
   else if (docType === 'cr') {
-    const plateMatch = text.match(/[A-Z]{3}\s*\d{3,4}/i) || text.match(/\b\d{3}\s*[A-Z]{3}\b/i)
-    crPlate.value = plateMatch ? plateMatch[0].toUpperCase() : 'NDG 4819'
-    
-    const brands = ['HONDA', 'TOYOTA', 'YAMAHA', 'SUZUKI', 'KAWASAKI', 'MITSUBISHI', 'NISSAN']
-    const colors = ['RED', 'BLACK', 'WHITE', 'BLUE', 'SILVER', 'GRAY', 'YELLOW']
-    
+    // Plate: look for common plate formats (ABC123, ABC 1234, 123 ABC)
+    const plateMatch = text.match(/([A-Z]{1,3}[-\s]?\d{2,4})/i) || text.match(/\b\d{2,4}[-\s]?[A-Z]{1,3}\b/i)
+    crPlate.value = plateMatch ? plateMatch[0].toUpperCase().replace(/\s+/, ' ') : 'NDG 4819'
+
+    // Brands and colors: expand lists to include more possibilities (e.g. BROWN)
+    const brands = ['HONDA', 'TOYOTA', 'YAMAHA', 'SUZUKI', 'KAWASAKI', 'MITSUBISHI', 'NISSAN', 'KTM', 'ISUZU']
+    const colors = ['RED', 'BLACK', 'WHITE', 'BLUE', 'SILVER', 'GRAY', 'GREY', 'YELLOW', 'BROWN', 'ORANGE', 'GREEN']
+
     let foundBrand = ''
     let foundColor = ''
-    
-    for (const b of brands) {
-      if (rawUpper.includes(b)) { foundBrand = b; break; }
-    }
-    for (const c of colors) {
-      if (rawUpper.includes(c)) { foundColor = c; break; }
-    }
-    
+    for (const b of brands) { if (rawUpper.includes(b)) { foundBrand = b; break } }
+    for (const c of colors) { if (rawUpper.includes(c)) { foundColor = c; break } }
+
     crBrand.value = foundBrand || 'YAMAHA'
     crColor.value = foundColor || 'BLACK'
-    
-    const modelMatch = text.match(/\b(CIVIC|VIOS|MIO|AEROX|NMAX|CLICK|ADV|BEAT)\b/i)
-    crModel.value = modelMatch ? modelMatch[0].toUpperCase() : 'MIO SPORTY'
-    
-    let foundOwner = ''
+
+    // Model: attempt to find a 'MODEL' label or use a longer token match
+    let model = ''
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes('OWNER') || lines[i].includes('NAME')) {
-        foundOwner = lines[i+1] || lines[i+2] || ''
-        break
+      const ln = lines[i]
+      if (/MODEL\b/.test(ln) || /VEHICLE TYPE\b/.test(ln) || /TYPE OF VEHICLE\b/.test(ln)) {
+        // Prefer inline value after ':' or the next non-empty line
+        const inline = ln.split(':')[1]
+        if (inline && inline.trim().length > 1) { model = inline.trim(); break }
+        model = (lines[i+1] || '').trim()
+        if (model) break
       }
     }
-    crOwnerName.value = foundOwner.replace(/[^A-Z\s]/g, ' ').replace(/\s+/g, ' ').trim() || licenseName.value || 'JUAN DELA CRUZ'
+    if (!model) {
+      // Fallback: capture multi-word tokens that look like model names (e.g., 'MIO SPORTY')
+      const modelMatch = text.match(/\b([A-Z0-9]{2,}\s?[A-Z0-9\s]{0,15}SPORTY|MIO SPORTY|AEROX|NMAX|CIVIC|VIOS|MIO|BEAT|CLICK|ADV)\b/i)
+      if (modelMatch) model = modelMatch[0]
+    }
+    crModel.value = model ? model.toUpperCase() : 'MIO SPORTY'
+
+    // Owner: prefer inline owner labels like "OWNER'S NAME: ..." or 'REGISTERED OWNER'
+    let foundOwner = ''
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i]
+      const ownerInline = ln.match(/OWNER(?:'S)?\s*NAME[:\-\s]+(.+)/i) || ln.match(/REGISTERED OWNER[:\-\s]+(.+)/i) || ln.match(/OWNER[:\-\s]+(.+)/i)
+      if (ownerInline && ownerInline[1]) { foundOwner = ownerInline[1].trim(); break }
+      if (/OWNER\b|NAME\b/.test(ln) && (lines[i+1] || '').trim()) {
+        // If label exists, take next line if inline not present
+        foundOwner = lines[i+1].trim(); break
+      }
+    }
+    // Clean owner string
+    crOwnerName.value = (foundOwner.replace(/[^A-Z\s\.\,]/gi, ' ').replace(/\s+/g, ' ').trim() || licenseName.value || 'JUAN DELA CRUZ')
   }
 }
 
