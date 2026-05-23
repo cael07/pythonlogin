@@ -547,23 +547,35 @@ async function triggerDocCapture() {
   // Short pause to let flash render
   await new Promise(r => setTimeout(r, 80))
 
-  const canvas = document.createElement('canvas')
-  canvas.width  = video.videoWidth  || 1920
-  canvas.height = video.videoHeight || 1080
-  const ctx = canvas.getContext('2d')
-  if (ctx) {
-    try { ctx.filter = 'contrast(1.4) brightness(1.1) grayscale(1)' } catch (_) {}
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    const base64 = canvas.toDataURL('image/jpeg', 0.95)
+  const w = video.videoWidth  || 1920
+  const h = video.videoHeight || 1080
 
-    const docType = activeCaptureType.value
-    if (docType === 'license')     licenseImage.value = base64
-    else if (docType === 'or')     orImage.value = base64
-    else if (docType === 'cr')     crImage.value = base64
+  // --- Canvas 1: Full COLOR for display/storage ---
+  const colorCanvas = document.createElement('canvas')
+  colorCanvas.width  = w
+  colorCanvas.height = h
+  const colorCtx = colorCanvas.getContext('2d')
+  colorCtx.drawImage(video, 0, 0, w, h)
+  const colorBase64 = colorCanvas.toDataURL('image/jpeg', 0.95)
 
-    closeCameraModal()
-    await runOCR(base64, docType)
-  }
+  // --- Canvas 2: High-contrast grayscale ONLY for OCR ---
+  const ocrCanvas = document.createElement('canvas')
+  ocrCanvas.width  = w
+  ocrCanvas.height = h
+  const ocrCtx = ocrCanvas.getContext('2d')
+  try { ocrCtx.filter = 'contrast(1.6) brightness(1.15) grayscale(1) saturate(0)' } catch (_) {}
+  ocrCtx.drawImage(video, 0, 0, w, h)
+  const ocrBase64 = ocrCanvas.toDataURL('image/jpeg', 0.95)
+
+  const docType = activeCaptureType.value
+  // Store COLOR image for preview
+  if (docType === 'license')     licenseImage.value = colorBase64
+  else if (docType === 'or')     orImage.value = colorBase64
+  else if (docType === 'cr')     crImage.value = colorBase64
+
+  closeCameraModal()
+  // Run OCR on the grayscale-enhanced version for better accuracy
+  await runOCR(ocrBase64, docType)
 }
 
 function switchMode(mode) {
@@ -692,18 +704,30 @@ function onFileChange(event, docType) {
   
   const reader = new FileReader()
   reader.onload = async (e) => {
-    const base64 = e.target.result
+    const colorBase64 = e.target.result
     
+    // Store original color image for display
     if (docType === 'license') {
-      licenseImage.value = base64
+      licenseImage.value = colorBase64
     } else if (docType === 'or') {
-      orImage.value = base64
+      orImage.value = colorBase64
     } else if (docType === 'cr') {
-      crImage.value = base64
+      crImage.value = colorBase64
     }
     
-    // Start client-side OCR on this file!
-    await runOCR(base64, docType)
+    // Build an enhanced grayscale version for OCR
+    const img = new Image()
+    img.onload = async () => {
+      const oc = document.createElement('canvas')
+      oc.width  = img.naturalWidth
+      oc.height = img.naturalHeight
+      const octx = oc.getContext('2d')
+      try { octx.filter = 'contrast(1.6) brightness(1.15) grayscale(1) saturate(0)' } catch (_) {}
+      octx.drawImage(img, 0, 0)
+      const ocrBase64 = oc.toDataURL('image/jpeg', 0.95)
+      await runOCR(ocrBase64, docType)
+    }
+    img.src = colorBase64
   }
   reader.readAsDataURL(file)
 }
@@ -711,13 +735,28 @@ function onFileChange(event, docType) {
 async function runOCR(fileBase64, docType) {
   ocrLoading.value = true
   ocrStatus.value = 'Loading OCR Neural Engines...'
-  error.value = '' // Clear existing errors
+  error.value = ''
   
   try {
     const Tesseract = await loadTesseract()
-    ocrStatus.value = 'Scanning layout and geometry...'
+    ocrStatus.value = 'Calibrating scanner...'
     
     const worker = await Tesseract.createWorker('eng')
+    
+    // Configure Tesseract for maximum accuracy on Philippine IDs
+    try {
+      await worker.setParameters({
+        // PSM 6 = Assume a single uniform block of text (best for IDs)
+        tessedit_pageseg_mode: '6',
+        // Tell Tesseract the image is scanned at 300 DPI
+        user_defined_dpi: '300',
+        // Only expect these characters — avoids misreading @#$% etc.
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :',
+      })
+    } catch (paramErr) {
+      console.warn('Could not set Tesseract params (older build):', paramErr)
+    }
+
     ocrStatus.value = 'Decoding text on document...'
     const ret = await worker.recognize(fileBase64)
     const text = ret.data.text
@@ -760,48 +799,65 @@ function parseOCRText(text, docType) {
   const rawUpper = text.toUpperCase()
   
   if (docType === 'license') {
-        // 1. Robust License Number Parsing with OCR Error Correction
-    // Pattern matches J01-20-003021, JO1-2O-OO3O21, J0120003021, etc.
-    // 1 letter, then 2 alphanumeric, then optional separator, then 2 alphanumeric, then optional separator, then 6 alphanumeric
-    const licRegex = /\b([A-Z0-9])([A-Z0-9]{2})[-/\s]?([A-Z0-9]{2})[-/\s]?([A-Z0-9]{6})\b/i
-    const licMatch = text.match(licRegex)
-    
-    if (licMatch) {
-      let firstChar = licMatch[1].toUpperCase()
-      if (/[0-9]/.test(firstChar)) {
-        firstChar = 'J' // default LTO code prefix fallback
-      }
-      
-      const parts = [licMatch[2], licMatch[3], licMatch[4]]
-      const normalizedParts = parts.map(part => {
-        let normalized = ''
-        for (const char of part.toUpperCase()) {
-          if (/[0-9]/.test(char)) {
-            normalized += char
-          } else if (char === 'O' || char === 'Q' || char === 'D') {
-            normalized += '0'
-          } else if (char === 'I' || char === 'L' || char === 'T') {
-            normalized += '1'
-          } else if (char === 'S' || char === 'G') {
-            normalized += '5'
-          } else if (char === 'B') {
-            normalized += '8'
-          } else if (char === 'Z') {
-            normalized += '2'
-          } else if (char === 'A') {
-            normalized += '4'
-          } else {
-            normalized += '0'
-          }
-        }
-        return normalized
-      })
-      
-      licenseNumber.value = `${firstChar}${normalizedParts[0]}-${normalizedParts[1]}-${normalizedParts[2]}`
-    } else {
-      const rawMatch = text.match(/[A-Z]\d{2}-\d{2}-\d{6}/i)
-      licenseNumber.value = rawMatch ? rawMatch[0].toUpperCase() : 'J01-20-' + Math.floor(100000 + Math.random() * 900000)
+    // ── Philippine License Number Parser ─────────────────────────────────
+    // Format: X00-00-000000  (1 letter region code, 2 digits, hyphen,
+    //                          2 digits, hyphen, 6 digits)
+    // OCR commonly confuses: O↔0, I↔1, l↔1, S↔5, B↔8, Z↔2, G↔6
+    //
+    // We run 4 passes in priority order and stop at the first hit.
+
+    // Helper: OCR-correct a segment that should contain only digits
+    function fixDigits(s) {
+      return s.toUpperCase().replace(/O|Q/g,'0').replace(/I|L/g,'1')
+              .replace(/S/g,'5').replace(/B/g,'8').replace(/Z/g,'2')
+              .replace(/G/g,'6').replace(/A/g,'4')
     }
+
+    // Helper: normalise a raw matched string into X00-00-000000
+    function normaliseLicNo(raw) {
+      const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g,'')
+      if (clean.length !== 11) return null
+      const letter = /^[A-Z]$/.test(clean[0]) ? clean[0] : null
+      if (!letter) return null
+      const p1 = fixDigits(clean.slice(1,3))
+      const p2 = fixDigits(clean.slice(3,5))
+      const p3 = fixDigits(clean.slice(5,11))
+      if (!/^\d{2}$/.test(p1) || !/^\d{2}$/.test(p2) || !/^\d{6}$/.test(p3)) return null
+      return `${letter}${p1}-${p2}-${p3}`
+    }
+
+    let licNo = null
+
+    // Pass 1 – look near the "LICENSE NO" / "LIC. NO" label (most reliable)
+    const labelZoneMatch = rawUpper.match(/LIC[A-Z.]*\s*NO[.:)#\s]+([A-Z0-9][A-Z0-9\s\-/.]{8,14})/i)
+    if (labelZoneMatch) licNo = normaliseLicNo(labelZoneMatch[1].replace(/\s/g,''))
+
+    // Pass 2 – strict hyphenated format exactly:  X00-00-000000
+    if (!licNo) {
+      const strict = text.match(/\b([A-Z])(\d{2})-(\d{2})-(\d{6})\b/i)
+      if (strict) licNo = `${strict[1].toUpperCase()}${strict[2]}-${strict[3]}-${strict[4]}`
+    }
+
+    // Pass 3 – OCR-tolerant hyphenated:  X[A-Z0-9]{2}-[A-Z0-9]{2}-[A-Z0-9]{6}
+    if (!licNo) {
+      const tolerant = text.match(/\b([A-Z])([A-Z0-9]{2})[-]([A-Z0-9]{2})[-]([A-Z0-9]{6})\b/i)
+      if (tolerant) {
+        const candidate = tolerant[1] + tolerant[2] + tolerant[3] + tolerant[4]
+        licNo = normaliseLicNo(candidate)
+      }
+    }
+
+    // Pass 4 – last resort: any 11 contiguous alphanum starting with a letter
+    // Only consider tokens that are NOT dates, plate numbers (7 chars), or MV files
+    if (!licNo) {
+      const loose = [...text.matchAll(/\b([A-Z][A-Z0-9]{10})\b/gi)]
+      for (const m of loose) {
+        const candidate = normaliseLicNo(m[1])
+        if (candidate) { licNo = candidate; break }
+      }
+    }
+
+    licenseNumber.value = licNo || ''
     
     // 2. Full Name Parsing
     let foundName = ''
