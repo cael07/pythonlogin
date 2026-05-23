@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://pythonlogin-api.onrender.com/auth',
+  baseURL: import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:8000/auth' : 'https://pythonlogin-api.onrender.com/auth'),
   headers: { 'Content-Type': 'application/json' },
 })
 

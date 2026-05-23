@@ -373,10 +373,14 @@ const ocrLoading = ref(false)
 const ocrStatus = ref('')
 
 // ── Offline Local OCR helper ────────────────────────────────────────────────
-// Calls the backend /api/ocr which runs a local EasyOCR deep-learning pipeline
+// Calls the backend /api/ocr which runs a local RapidOCR deep-learning pipeline
 // completely offline without any external network request.
-const API_BASE = (import.meta.env.VITE_API_URL || 'https://pythonlogin-api.onrender.com/auth')
-  .replace(/\/auth\/?$/, '')  // strip /auth suffix to get root
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL.replace(/\/auth\/?$/, '')
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  return isLocal ? 'http://localhost:8000' : 'https://pythonlogin-api.onrender.com'
+}
+const API_BASE = getApiBase()
 
 async function callOfflineOCR(imageBase64, docType) {
   const resp = await fetch(`${API_BASE}/api/ocr`, {

@@ -123,7 +123,7 @@ onMounted(async () => {
   }
 
   // Check API health
-  const apiBase = import.meta.env.VITE_API_URL || 'https://pythonlogin-api.onrender.com/auth'
+  const apiBase = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:8000/auth' : 'https://pythonlogin-api.onrender.com/auth')
   try {
     const res = await fetch(`${apiBase}/health`)
     if (res.ok) apiStatus.value = 'online'
