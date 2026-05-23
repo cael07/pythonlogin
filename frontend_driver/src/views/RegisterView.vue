@@ -273,6 +273,9 @@
   <!-- Fullscreen Document Scanner Modal -->
   <Transition name="fade">
     <div v-if="showCameraModal" class="camera-modal-overlay">
+      <!-- Camera Flash effect -->
+      <div v-if="captureFlash" class="camera-flash"></div>
+
       <div class="camera-modal-content">
         <!-- Header -->
         <div class="camera-modal-header">
@@ -283,18 +286,33 @@
         <!-- Viewfinder -->
         <div class="camera-modal-viewfinder">
           <video ref="modalVideoEl" class="modal-video" autoplay muted playsinline></video>
+
+          <!-- Guideline rect — turns green when document detected -->
           <div class="camera-modal-guideline">
-            <div class="camera-modal-guideline-rect">
-              <span class="guideline-text">ALIGN DOCUMENT EDGES</span>
+            <div class="camera-modal-guideline-rect" :class="{ aligned: docAligned, capturing: docCountdown > 0 }">
+              <!-- Countdown ring when holding -->
+              <div v-if="docCountdown > 0" class="doc-countdown-ring">
+                <span class="doc-countdown-number">{{ docCountdown }}</span>
+              </div>
+              <span v-else class="guideline-text">
+                {{ docAligned ? '✓ DOCUMENT DETECTED' : 'ALIGN DOCUMENT EDGES' }}
+              </span>
             </div>
+          </div>
+
+          <!-- Hint bar inside viewfinder -->
+          <div class="doc-hint-bar" :class="{ aligned: docAligned }">
+            <span v-if="docCountdown > 0">📸 Hold still…</span>
+            <span v-else-if="docAligned">✅ Document detected — hold steady</span>
+            <span v-else>📄 Fit the document inside the frame</span>
           </div>
         </div>
 
         <!-- Footer Controls -->
         <div class="camera-modal-controls">
           <button class="btn btn-ghost modal-btn-cancel" @click="closeCameraModal">Cancel</button>
-          <button class="btn btn-primary modal-btn-capture" @click="capturePhotoFromModal">
-            📸 Capture Document
+          <button class="btn btn-primary modal-btn-capture" @click="triggerDocCapture">
+            📸 Capture Now
           </button>
         </div>
       </div>
@@ -324,7 +342,13 @@ const activeMode = ref('upload')
 const showCameraModal = ref(false)
 const modalVideoEl = ref(null)
 const activeCaptureType = ref('') // 'license', 'or', 'cr'
+const docAligned = ref(false)
+const docCountdown = ref(0)
+const captureFlash = ref(false)
 let cameraStream = null
+let docDetectionRaf = null
+let autoCaptureTimer = null
+let countdownInterval = null
 
 // Document base64 states
 const licenseImage = ref(null)
@@ -363,7 +387,10 @@ const loadTesseract = () => {
 async function openCameraModal(docType) {
   activeCaptureType.value = docType
   showCameraModal.value = true
-  
+  docAligned.value = false
+  docCountdown.value = 0
+  captureFlash.value = false
+
   stopDocCamera()
   try {
     const constraints = {
@@ -379,8 +406,10 @@ async function openCameraModal(docType) {
     setTimeout(() => {
       if (modalVideoEl.value) {
         modalVideoEl.value.srcObject = stream
+        // Start the auto-detection loop once video is streaming
+        startDocDetectionLoop()
       }
-    }, 150)
+    }, 300)
   } catch (err) {
     console.error("Error accessing camera:", err)
     error.value = "Unable to access camera. Please allow camera permissions or use Upload mode."
@@ -389,10 +418,15 @@ async function openCameraModal(docType) {
 }
 
 function closeCameraModal() {
+  stopDocDetectionLoop()
+  cancelAutoCapture()
   stopDocCamera()
   showCameraModal.value = false
   activeCaptureType.value = ''
   activeMode.value = 'upload'
+  docAligned.value = false
+  docCountdown.value = 0
+  captureFlash.value = false
 }
 
 function stopDocCamera() {
@@ -405,6 +439,133 @@ function stopDocCamera() {
   }
 }
 
+// ── Document auto-detection loop ─────────────────────────────
+// Samples the center region of the video frame to detect whether
+// a document (bright rectangle) fills ~70%+ of the guideline box.
+function startDocDetectionLoop() {
+  stopDocDetectionLoop()
+  let steadyFrames = 0
+  const STEADY_NEEDED = 8 // consecutive aligned frames before starting countdown
+
+  function detect() {
+    const video = modalVideoEl.value
+    if (!video || !cameraStream || video.readyState < 2) {
+      docDetectionRaf = requestAnimationFrame(detect)
+      return
+    }
+
+    // Sample a small canvas in the guideline zone (center 70% × 55%)
+    const sW = Math.floor(video.videoWidth  * 0.70)
+    const sH = Math.floor(video.videoHeight * 0.55)
+    const sX = Math.floor((video.videoWidth  - sW) / 2)
+    const sY = Math.floor((video.videoHeight - sH) / 2)
+
+    const offscreen = document.createElement('canvas')
+    offscreen.width  = 64
+    offscreen.height = 40
+    const c = offscreen.getContext('2d')
+    c.drawImage(video, sX, sY, sW, sH, 0, 0, 64, 40)
+
+    const pixels = c.getImageData(0, 0, 64, 40).data
+    let brightPx = 0
+    const total = 64 * 40
+    for (let i = 0; i < pixels.length; i += 4) {
+      const brightness = (pixels[i] * 0.299 + pixels[i+1] * 0.587 + pixels[i+2] * 0.114)
+      if (brightness > 160) brightPx++
+    }
+
+    // Document is considered detected when >55% of center pixels are bright
+    const ratio = brightPx / total
+    const detected = ratio > 0.55
+
+    if (detected) {
+      steadyFrames++
+    } else {
+      steadyFrames = 0
+      if (docAligned.value) {
+        // Lost alignment — cancel any running countdown
+        cancelAutoCapture()
+      }
+      docAligned.value = false
+    }
+
+    if (steadyFrames >= STEADY_NEEDED && !docAligned.value && docCountdown.value === 0) {
+      docAligned.value = true
+      startAutoCapture()
+    }
+
+    docDetectionRaf = requestAnimationFrame(detect)
+  }
+
+  docDetectionRaf = requestAnimationFrame(detect)
+}
+
+function stopDocDetectionLoop() {
+  if (docDetectionRaf) {
+    cancelAnimationFrame(docDetectionRaf)
+    docDetectionRaf = null
+  }
+}
+
+function startAutoCapture() {
+  cancelAutoCapture()
+  docCountdown.value = 3
+
+  countdownInterval = setInterval(() => {
+    docCountdown.value--
+    if (docCountdown.value <= 0) {
+      clearInterval(countdownInterval)
+      countdownInterval = null
+      triggerDocCapture()
+    }
+  }, 1000)
+}
+
+function cancelAutoCapture() {
+  if (countdownInterval) {
+    clearInterval(countdownInterval)
+    countdownInterval = null
+  }
+  if (autoCaptureTimer) {
+    clearTimeout(autoCaptureTimer)
+    autoCaptureTimer = null
+  }
+  docCountdown.value = 0
+}
+
+async function triggerDocCapture() {
+  stopDocDetectionLoop()
+  cancelAutoCapture()
+
+  if (!modalVideoEl.value || !cameraStream) return
+  const video = modalVideoEl.value
+
+  // Flash effect
+  captureFlash.value = true
+  setTimeout(() => { captureFlash.value = false }, 300)
+
+  // Short pause to let flash render
+  await new Promise(r => setTimeout(r, 80))
+
+  const canvas = document.createElement('canvas')
+  canvas.width  = video.videoWidth  || 1920
+  canvas.height = video.videoHeight || 1080
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    try { ctx.filter = 'contrast(1.4) brightness(1.1) grayscale(1)' } catch (_) {}
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const base64 = canvas.toDataURL('image/jpeg', 0.95)
+
+    const docType = activeCaptureType.value
+    if (docType === 'license')     licenseImage.value = base64
+    else if (docType === 'or')     orImage.value = base64
+    else if (docType === 'cr')     crImage.value = base64
+
+    closeCameraModal()
+    await runOCR(base64, docType)
+  }
+}
+
 function switchMode(mode) {
   activeMode.value = mode
   if (mode === 'camera') {
@@ -414,31 +575,6 @@ function switchMode(mode) {
     openCameraModal(docType)
   } else {
     closeCameraModal()
-  }
-}
-
-async function capturePhotoFromModal() {
-  if (!modalVideoEl.value || !cameraStream) return
-  const video = modalVideoEl.value
-  const canvas = document.createElement('canvas')
-  canvas.width = video.videoWidth || 1920
-  canvas.height = video.videoHeight || 1080
-  const ctx = canvas.getContext('2d')
-  if (ctx) {
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    const base64 = canvas.toDataURL('image/jpeg', 0.95)
-    
-    const docType = activeCaptureType.value
-    if (docType === 'license') {
-      licenseImage.value = base64
-    } else if (docType === 'or') {
-      orImage.value = base64
-    } else if (docType === 'cr') {
-      crImage.value = base64
-    }
-    
-    closeCameraModal()
-    await runOCR(base64, docType)
   }
 }
 
@@ -1168,18 +1304,36 @@ async function handleRegister(formData) {
   width: 88%;
   max-width: 480px;
   aspect-ratio: 1.58;
-  border: 2px dashed rgba(255, 255, 255, 0.6);
+  border: 2.5px dashed rgba(255, 255, 255, 0.55);
   border-radius: var(--radius-md);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4), 0 0 15px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s;
+  transition: border-color 0.35s ease, box-shadow 0.35s ease;
+  position: relative;
 }
 
-.camera-modal-viewfinder:hover .camera-modal-guideline-rect {
-  border-color: var(--primary-light);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4), 0 0 25px rgba(99, 102, 241, 0.7);
+/* Green when document is detected */
+.camera-modal-guideline-rect.aligned {
+  border-color: #22c55e;
+  border-style: solid;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45),
+              0 0 28px rgba(34, 197, 94, 0.7);
+}
+
+/* Pulsing green ring during countdown */
+.camera-modal-guideline-rect.capturing {
+  border-color: #22c55e;
+  border-style: solid;
+  animation: pulseGreen 0.9s ease-in-out infinite;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45),
+              0 0 40px rgba(34, 197, 94, 0.9);
+}
+
+@keyframes pulseGreen {
+  0%, 100% { box-shadow: 0 0 0 9999px rgba(0,0,0,0.45), 0 0 40px rgba(34,197,94,0.9); }
+  50%       { box-shadow: 0 0 0 9999px rgba(0,0,0,0.45), 0 0 60px rgba(34,197,94,1);   }
 }
 
 .guideline-text {
@@ -1189,6 +1343,81 @@ async function handleRegister(formData) {
   letter-spacing: 0.2em;
   text-align: center;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  transition: color 0.3s;
+}
+
+.camera-modal-guideline-rect.aligned .guideline-text {
+  color: #86efac;
+  text-shadow: 0 0 12px rgba(34, 197, 94, 0.8);
+}
+
+/* Countdown ring */
+.doc-countdown-ring {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.15);
+  border: 3px solid #22c55e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 30px rgba(34, 197, 94, 0.6);
+  animation: countdownPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes countdownPop {
+  from { transform: scale(0.6); opacity: 0.4; }
+  to   { transform: scale(1);   opacity: 1;   }
+}
+
+.doc-countdown-number {
+  font-size: 2.8rem;
+  font-weight: 800;
+  color: #22c55e;
+  line-height: 1;
+  text-shadow: 0 0 20px rgba(34, 197, 94, 0.8);
+}
+
+/* Hint bar inside viewfinder */
+.doc-hint-bar {
+  position: absolute;
+  bottom: 5%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 11, 15, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  padding: 0.55rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  white-space: nowrap;
+  letter-spacing: 0.03em;
+  transition: all 0.3s;
+  z-index: 10;
+}
+
+.doc-hint-bar.aligned {
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #86efac;
+  background: rgba(10, 30, 15, 0.8);
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.3);
+}
+
+/* Camera flash */
+.camera-flash {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  z-index: 99999;
+  pointer-events: none;
+  animation: flashAnim 0.28s ease-out forwards;
+}
+
+@keyframes flashAnim {
+  0%   { opacity: 0.95; }
+  100% { opacity: 0; }
 }
 
 .camera-modal-controls {

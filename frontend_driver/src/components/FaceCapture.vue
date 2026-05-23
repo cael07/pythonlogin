@@ -40,11 +40,12 @@
         <div class="fc-pose-hud">
           <Transition name="fade-scale" mode="out-in">
             <div
-              :key="scanStage"
+              :key="isScanSuccess ? 'countdown-' + faceCountdown : scanStage"
               class="fc-pose-step pulse"
               :class="{ success: isScanSuccess }"
             >
-              <span>{{ ['Face Left', 'Face Right', 'Face Front'][scanStage] || 'Success!' }}</span>
+              <span v-if="isScanSuccess && faceCountdown > 0">{{ faceCountdown }}</span>
+              <span v-else>{{ ['Face Left', 'Face Right', 'Face Front'][scanStage] || 'Success!' }}</span>
             </div>
           </Transition>
         </div>
@@ -54,8 +55,9 @@
       <div class="fc-instruction-bar" :class="{ 'success': isScanSuccess }">
         <div class="fc-instruction-icon">
           <Transition name="fade" mode="out-in">
-            <span :key="scanStage">
-              <span v-if="isScanSuccess">✅</span>
+            <span :key="isScanSuccess ? 'countdown-' + faceCountdown : scanStage">
+              <span v-if="isScanSuccess && faceCountdown > 0">🕒</span>
+              <span v-else-if="isScanSuccess">✅</span>
               <span v-else-if="!faceAligned">👁</span>
               <span v-else-if="scanStage === 0">⬅️</span>
               <span v-else-if="scanStage === 1">➡️</span>
@@ -97,6 +99,7 @@ const hint       = ref('Loading face detection models…')
 const scanStage  = ref(0)           // 0: Left, 1: Right, 2: Front
 const faceAligned = ref(false)
 const isScanSuccess = ref(false)
+const faceCountdown = ref(0)
 const capturedImg = ref(null)
 
 /* ── Template refs ──────────────────────────────────────── */
@@ -108,6 +111,7 @@ let rafId           = null
 let modelsReady     = false
 let captureInProgress = false
 let captureTimer    = null
+let countdownInterval = null
 
 /* ── Geometry helpers ───────────────────────────────────── */
 function isFaceInOval(box, w, h) {
@@ -168,7 +172,7 @@ async function detectionLoop() {
         if (ratio > 0.8 && ratio < 1.25) {
           scanStage.value = 3
           isScanSuccess.value = true
-          hint.value = '📸 Perfect! Hold still...'
+          hint.value = '📸 Hold still… 3'
           triggerCapture()
           return
         }
@@ -187,21 +191,30 @@ function triggerCapture() {
   captureInProgress = true
   cancelAnimationFrame(rafId)
 
-  captureTimer = setTimeout(() => {
-    const video = videoEl.value
-    if (!video) return
+  // 3-second countdown before capturing
+  faceCountdown.value = 3
 
-    const c = document.createElement('canvas')
-    c.width  = video.videoWidth
-    c.height = video.videoHeight
-    const ctx = c.getContext('2d')
-    ctx.drawImage(video, 0, 0)
-    capturedImg.value = c.toDataURL('image/jpeg', 0.92)
-
-    stopCamera()
-    uiState.value = 'captured'
-    emit('captured', capturedImg.value)
-  }, 800)
+  countdownInterval = setInterval(() => {
+    faceCountdown.value--
+    if (faceCountdown.value > 0) {
+      hint.value = `📸 Hold still… ${faceCountdown.value}`
+    } else {
+      clearInterval(countdownInterval)
+      countdownInterval = null
+      // Take the photo
+      const video = videoEl.value
+      if (!video) return
+      const c = document.createElement('canvas')
+      c.width  = video.videoWidth
+      c.height = video.videoHeight
+      const ctx = c.getContext('2d')
+      ctx.drawImage(video, 0, 0)
+      capturedImg.value = c.toDataURL('image/jpeg', 0.92)
+      stopCamera()
+      uiState.value = 'captured'
+      emit('captured', capturedImg.value)
+    }
+  }, 1000)
 }
 
 /* ── Camera control ─────────────────────────────────────── */
@@ -255,8 +268,10 @@ function retake() {
   capturedImg.value  = null
   scanStage.value    = 0
   isScanSuccess.value = false
+  faceCountdown.value = 0
   captureInProgress  = false
   if (captureTimer) clearTimeout(captureTimer)
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
   startCamera()
 }
 
@@ -264,6 +279,7 @@ onMounted(init)
 onUnmounted(() => {
   stopCamera()
   if (captureTimer) clearTimeout(captureTimer)
+  if (countdownInterval) clearInterval(countdownInterval)
 })
 </script>
 
