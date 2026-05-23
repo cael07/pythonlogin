@@ -1171,71 +1171,66 @@ function parseOCRText(text, docType) {
   }
   
   else if (docType === 'cr') {
-    // Improve robustness: sanitize OCR output and prefer candidates that mix letters+digits
-    const sanitized = text.replace(/[^A-Za-z0-9\s:\-\.\,]/g, ' ').replace(/\s+/g, ' ').trim()
-    const upperSan = sanitized.toUpperCase()
+    const linesRaw = text.split('\n').map(l => l.trim())
+    const upperLines = linesRaw.map(l => l.toUpperCase())
 
-    // Plate extraction: prefer patterns with both letters and digits, avoid 4-digit year matches
-    let plate = ''
-    const plateRegex = /([A-Z]{1,3})\s*[-\s]?\s*(\d{1,4})\s*[-\s]?\s*([A-Z]{0,3})/g
-    for (const m of upperSan.matchAll(plateRegex)) {
-      const cand = (m[1] + m[2] + (m[3] || '')).replace(/[-\s]/g, '')
-      if (/^(19|20)\d{2}$/.test(cand)) continue
-      if (/[A-Z]/.test(cand) && /\d/.test(cand)) { plate = cand; break }
+    function extractField(labels) {
+      const upperLabels = labels.map(l => l.toUpperCase())
+      for (let i = 0; i < upperLines.length; i++) {
+        const upper = upperLines[i]
+        for (const label of upperLabels) {
+          const idx = upper.indexOf(label)
+          if (idx !== -1) {
+            let value = linesRaw[i].slice(idx + label.length).trim()
+            value = value.replace(/^[:\-\.\s]+/, '').trim()
+            if (value && !upperLabels.some(l => value.toUpperCase().includes(l))) {
+              return value
+            }
+            const next = linesRaw[i + 1] ? linesRaw[i + 1].trim() : ''
+            if (next && !upperLabels.some(l => next.toUpperCase().includes(l))) {
+              return next
+            }
+          }
+        }
+      }
+      return ''
     }
-    // fallback older heuristics
+
+    const plateRaw = extractField(['PLATE NO', 'PLATE NO.', 'PLATE NUMBER', 'PLATE'])
+    let plate = ''
+    if (plateRaw) {
+      const match = plateRaw.match(/([A-Z0-9]{1,3})\s*[-\s]?\s*([A-Z0-9]{1,4})\s*([A-Z]{0,3})/i)
+      plate = match ? (match[1] + match[2] + (match[3] || '')).toUpperCase() : plateRaw.toUpperCase()
+    }
     if (!plate) {
-      const fallback = upperSan.match(/\b[A-Z]{1,3}\s*\d{2,4}\b/) || upperSan.match(/\b\d{2,4}\s*[A-Z]{1,3}\b/)
-      plate = fallback ? fallback[0].replace(/\s+/g, '') : ''
+      const fallback = text.match(/\b[A-Z]{1,3}\s*\d{2,4}\b/) || text.match(/\b\d{2,4}\s*[A-Z]{1,3}\b/)
+      plate = fallback ? fallback[0].replace(/\s+/g, '').toUpperCase() : ''
     }
     crPlate.value = plate || 'NDG 4819'
 
-    // Brand and color detection using sanitized text
-    const brands = ['HONDA','TOYOTA','YAMAHA','SUZUKI','KAWASAKI','MITSUBISHI','NISSAN','KTM','ISUZU']
-    const colors = ['RED','BLACK','WHITE','BLUE','SILVER','GRAY','GREY','YELLOW','BROWN','ORANGE','GREEN']
-    let foundBrand = ''
-    let foundColor = ''
-    for (const b of brands) if (upperSan.includes(b)) { foundBrand = b; break }
-    for (const c of colors) if (upperSan.includes(c)) { foundColor = c; break }
-    crBrand.value = foundBrand || 'YAMAHA'
-    crColor.value = foundColor || 'BLACK'
+    crBrand.value = extractField(['MAKE/BRAND', 'MAKE', 'BRAND']).toUpperCase() || 'YAMAHA'
+    crColor.value = extractField(['COLOR']).toUpperCase() || 'BLACK'
 
-    // Model extraction: look for 'MODEL' label or 'TYPE' labels, clean punctuation
-    let model = ''
-    for (let i = 0; i < lines.length; i++) {
-      const ln = lines[i]
-      if (/MODEL\b/.test(ln) || /VEHICLE TYPE\b/.test(ln) || /TYPE OF VEHICLE\b/.test(ln)) {
-        const inline = ln.split(':')[1]
-        if (inline && inline.trim().length > 1) { model = inline.trim(); break }
-        model = (lines[i+1] || '').trim()
-        if (model) break
-      }
-    }
+    let model = extractField(['YEAR MODEL', 'MODEL'])
     if (!model) {
-      const modelMatch = upperSan.match(/\b([A-Z0-9]{2,}\s?[A-Z0-9\s]{0,15}SPORTY|MIO SPORTY|AEROX|NMAX|CIVIC|VIOS|MIO|BEAT|CLICK|ADV|PORTE|PORTE FE|PORTER)\b/i)
-      if (modelMatch) model = modelMatch[0]
+      const fallbackModel = text.match(/\b(MIO SPORTY|AEROX|NMAX|CIVIC|VIOS|MIO|BEAT|CLICK|ADV|PORTE|PORTER)\b/i)
+      model = fallbackModel ? fallbackModel[0] : ''
     }
-    model = model.replace(/^[:\-\s]+|[:\-\s]+$/g, '').replace(/\s{2,}/g, ' ')
-    crModel.value = model ? model.toUpperCase() : 'MIO SPORTY'
+    crModel.value = model ? model.toUpperCase().replace(/^[:\-\s]+|[:\-\s]+$/g, '') : 'MIO SPORTY'
 
-    // Owner extraction: prefer inline owner labels; otherwise pick the longest uppercase line with multiple words
-    let foundOwner = ''
-    for (let i = 0; i < lines.length; i++) {
-      const ln = lines[i]
-      const ownerInline = ln.match(/OWNER(?:'S)?\s*NAME[:\-\s]+(.+)/i) || ln.match(/REGISTERED OWNER[:\-\s]+(.+)/i) || ln.match(/OWNER[:\-\s]+(.+)/i)
-      if (ownerInline && ownerInline[1]) { foundOwner = ownerInline[1].trim(); break }
-      if (/OWNER\b|NAME\b/.test(ln) && (lines[i+1] || '').trim()) { foundOwner = lines[i+1].trim(); break }
-    }
-    if (!foundOwner || foundOwner.length < 4) {
-      // Fallback: choose the longest line with at least two words and >6 chars
-      let best = ''
-      for (const l of lines) {
-        const candidate = l.trim()
-        if (candidate.length > best.length && /[A-Z]/.test(candidate) && (candidate.split(/\s+/).length >= 2) && candidate.length > 6) best = candidate
+    let owner = extractField(["OWNER'S NAME", "OWNERS NAME", 'OWNER NAME', 'REGISTERED OWNER'])
+    if (!owner) {
+      const ownerIndex = upperLines.findIndex((l, idx) => /OWNER\b/.test(l) && linesRaw[idx + 1] && !/OWNER\b/.test(upperLines[idx + 1]))
+      if (ownerIndex !== -1) {
+        owner = linesRaw[ownerIndex + 1].trim()
       }
-      foundOwner = best || foundOwner
     }
-    crOwnerName.value = (foundOwner.replace(/[^A-Z\s\.\,]/gi, ' ').replace(/\s+/g, ' ').trim() || licenseName.value || 'JUAN DELA CRUZ')
+    if (!owner) {
+      owner = linesRaw
+        .filter(l => l.length > 6 && /\s/.test(l))
+        .sort((a, b) => b.length - a.length)[0] || ''
+    }
+    crOwnerName.value = owner.replace(/[^A-Z\s\.\,]/gi, ' ').replace(/\s+/g, ' ').trim() || licenseName.value || 'JUAN DELA CRUZ'
   }
 }
 
