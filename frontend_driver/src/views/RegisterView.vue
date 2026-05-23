@@ -111,7 +111,7 @@
             </div>
 
             <div class="btn-row">
-              <button class="btn btn-ghost" @click="licenseImage = null">❌ Clear & Retake</button>
+              <button class="btn btn-ghost" @click="licenseImage = null">↶ Retake</button>
               <button class="btn btn-success" :disabled="!licenseNumber || !licenseName || isLicenseExpired" @click="goToStep(3)">Next Step ➔</button>
             </div>
           </div>
@@ -168,7 +168,7 @@
             </div>
 
             <div class="btn-row">
-              <button class="btn btn-ghost" @click="orImage = null">❌ Clear & Retake</button>
+              <button class="btn btn-ghost" @click="orImage = null">↶ Retake</button>
               <button class="btn btn-success" :disabled="!orRenewalDate || isOrExpired" @click="goToStep(4)">Next Step ➔</button>
             </div>
           </div>
@@ -241,7 +241,7 @@
             </div>
 
             <div class="btn-row">
-              <button class="btn btn-ghost" @click="crImage = null">❌ Clear & Retake</button>
+              <button class="btn btn-ghost" @click="crImage = null">↶ Retake</button>
               <button class="btn btn-success" :disabled="!crPlate || !crBrand || !crOwnerName" @click="goToStep(5)">Next Step ➔</button>
             </div>
           </div>
