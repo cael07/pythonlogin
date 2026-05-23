@@ -1173,6 +1173,7 @@ function parseOCRText(text, docType) {
   else if (docType === 'cr') {
     const linesRaw = text.split('\n').map(l => l.trim())
     const upperLines = linesRaw.map(l => l.toUpperCase())
+    const rawUpper = text.toUpperCase()
 
     function extractField(labels) {
       const upperLabels = labels.map(l => l.toUpperCase())
@@ -1208,15 +1209,47 @@ function parseOCRText(text, docType) {
     }
     crPlate.value = plate || 'NDG 4819'
 
-    crBrand.value = extractField(['MAKE/BRAND', 'MAKE', 'BRAND']).toUpperCase() || 'YAMAHA'
-    crColor.value = extractField(['COLOR']).toUpperCase() || 'BLACK'
-
-    let model = extractField(['YEAR MODEL', 'MODEL'])
-    if (!model) {
-      const fallbackModel = text.match(/\b(MIO SPORTY|AEROX|NMAX|CIVIC|VIOS|MIO|BEAT|CLICK|ADV|PORTE|PORTER)\b/i)
-      model = fallbackModel ? fallbackModel[0] : ''
+    const KNOWN_BRANDS = ['HONDA', 'YAMAHA', 'SUZUKI', 'KAWASAKI', 'TOYOTA', 'NISSAN', 'ISUZU', 'MITSUBISHI', 'MAZDA', 'HYUNDAI', 'KIA', 'FORD', 'CHEVROLET', 'HINO']
+    function matchKnownBrand() {
+      for (const brand of KNOWN_BRANDS) {
+        if (rawUpper.includes(brand)) {
+          return brand
+        }
+      }
+      return ''
     }
-    crModel.value = model ? model.toUpperCase().replace(/^[:\-\s]+|[:\-\s]+$/g, '') : 'MIO SPORTY'
+
+    const brandRaw = extractField(['MAKE/BRAND', 'MAKE', 'BRAND'])
+    const brandCand = brandRaw.toUpperCase().replace(/[^A-Z\s]/g, '').trim()
+    crBrand.value = brandCand && !/\d/.test(brandCand) ? brandCand : matchKnownBrand() || 'YAMAHA'
+
+    const KNOWN_COLORS = ['BLACK', 'WHITE', 'RED', 'BLUE', 'GREEN', 'YELLOW', 'BROWN', 'SILVER', 'GRAY', 'GREY', 'ORANGE', 'GOLD', 'MAROON', 'BEIGE']
+    function matchKnownColor() {
+      for (const color of KNOWN_COLORS) {
+        if (rawUpper.includes(color)) {
+          return color
+        }
+      }
+      return ''
+    }
+
+    const colorRaw = extractField(['COLOR'])
+    const colorCand = colorRaw.toUpperCase().replace(/[^A-Z\s]/g, '').trim()
+    crColor.value = colorCand || matchKnownColor() || 'BLACK'
+
+    let model = extractField(['YEAR MODEL', 'YEAR MODEL (NEW/USED IMPORTED CBU)'])
+    if (!model) {
+      const yearLineIndex = upperLines.findIndex(l => l.includes('YEAR MODEL'))
+      if (yearLineIndex !== -1 && linesRaw[yearLineIndex + 1]) {
+        model = linesRaw[yearLineIndex + 1].trim()
+      }
+    }
+    let yearMatch = model.match(/\b(19|20)\d{2}\b/)
+    if (!yearMatch) {
+      const fallbackYear = text.match(/\b(19|20)\d{2}\b/)
+      yearMatch = fallbackYear
+    }
+    crModel.value = yearMatch ? yearMatch[0] : ''
 
     let owner = extractField(["OWNER'S NAME", "OWNERS NAME", 'OWNER NAME', 'REGISTERED OWNER'])
     if (!owner) {
