@@ -622,9 +622,10 @@ function verifyDocumentText(text, docType) {
     const hasRegistration = upper.includes('REGISTRATION')
     return hasReceipt && (hasOfficial || hasPayment || hasMvuc || hasCashier) && !hasRegistration
   } else if (docType === 'cr') {
-    // Certificate of Registration must contain REGISTRATION, CERTIFICATE, CR NO, CHASSIS, ENGINE, or PLATE
-    return upper.includes('REGISTRATION') || upper.includes('CERTIFICATE') || upper.includes('CR NO') || 
-           upper.includes('CHASSIS') || upper.includes('ENGINE') || upper.includes('PLATE') || upper.includes('LTO')
+    // Certificate of Registration must explicitly include both 'CERTIFICATE' and 'REGISTRATION'
+    const hasRegistration = upper.includes('REGISTRATION')
+    const hasCertificate = upper.includes('CERTIFICATE')
+    return hasRegistration && hasCertificate
   }
   return true
 }
