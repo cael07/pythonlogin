@@ -356,6 +356,19 @@ body::before {
   margin: 0 0.25rem;
 }
 
+@media (max-width: 600px) {
+  .step span {
+    display: none;
+  }
+  .step-line {
+    width: 24px;
+    margin: 0 0.15rem;
+  }
+  .steps {
+    margin-bottom: 1.5rem;
+  }
+}
+
 /* ─── Page transitions ────────────────────────────────────── */
 .page-enter-active { transition: all .35s var(--ease); }
 .page-leave-active { transition: all .25s var(--ease); }

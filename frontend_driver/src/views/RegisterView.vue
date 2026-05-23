@@ -1,6 +1,6 @@
 <template>
   <div class="auth-page">
-    <div class="auth-card-wide glass" style="padding: 2.5rem; max-width: 650px;">
+    <div class="auth-card-wide glass register-card">
       <!-- Header -->
       <div class="auth-header">
         <div class="auth-logo">
@@ -112,7 +112,6 @@
 
             <div class="btn-row">
               <button class="btn btn-ghost" @click="licenseImage = null">❌ Clear & Retake</button>
-              <button class="btn btn-outline" @click="fillDemoData('license')">🪄 Prefill Demo</button>
               <button class="btn btn-success" :disabled="!licenseNumber || !licenseName || isLicenseExpired" @click="goToStep(3)">Next Step ➔</button>
             </div>
           </div>
@@ -170,7 +169,6 @@
 
             <div class="btn-row">
               <button class="btn btn-ghost" @click="orImage = null">❌ Clear & Retake</button>
-              <button class="btn btn-outline" @click="fillDemoData('or')">🪄 Prefill Demo</button>
               <button class="btn btn-success" :disabled="!orRenewalDate || isOrExpired" @click="goToStep(4)">Next Step ➔</button>
             </div>
           </div>
@@ -244,7 +242,6 @@
 
             <div class="btn-row">
               <button class="btn btn-ghost" @click="crImage = null">❌ Clear & Retake</button>
-              <button class="btn btn-outline" @click="fillDemoData('cr')">🪄 Prefill Demo</button>
               <button class="btn btn-success" :disabled="!crPlate || !crBrand || !crOwnerName" @click="goToStep(5)">Next Step ➔</button>
             </div>
           </div>
@@ -885,7 +882,9 @@ function parseOCRText(text, docType) {
       while (STRAY_LEADERS.test(name)) {
         name = name.replace(STRAY_LEADERS, '').trim()
       }
-      return name
+      
+      // Remove any leading/trailing periods or whitespace (e.g. ". LITERATUS" -> "LITERATUS")
+      return name.replace(/^[.\s]+|[.\s]+$/g, '').trim()
     }
 
     let foundName = ''
@@ -1603,6 +1602,18 @@ async function handleRegister(formData) {
 .camera-placeholder-subtext {
   font-size: 0.78rem;
   color: var(--text-3);
+}
+
+.register-card {
+  padding: 2.5rem;
+  max-width: 650px;
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  .register-card {
+    padding: 1.25rem 0.75rem !important; /* Smaller margins/paddings on mobile */
+  }
 }
 </style>
 
