@@ -1171,28 +1171,40 @@ function parseOCRText(text, docType) {
   }
   
   else if (docType === 'cr') {
-    // Plate: look for common plate formats (ABC123, ABC 1234, 123 ABC)
-    const plateMatch = text.match(/([A-Z]{1,3}[-\s]?\d{2,4})/i) || text.match(/\b\d{2,4}[-\s]?[A-Z]{1,3}\b/i)
-    crPlate.value = plateMatch ? plateMatch[0].toUpperCase().replace(/\s+/, ' ') : 'NDG 4819'
+    // Improve robustness: sanitize OCR output and prefer candidates that mix letters+digits
+    const sanitized = text.replace(/[^A-Za-z0-9\s:\-\.\,]/g, ' ').replace(/\s+/g, ' ').trim()
+    const upperSan = sanitized.toUpperCase()
 
-    // Brands and colors: expand lists to include more possibilities (e.g. BROWN)
-    const brands = ['HONDA', 'TOYOTA', 'YAMAHA', 'SUZUKI', 'KAWASAKI', 'MITSUBISHI', 'NISSAN', 'KTM', 'ISUZU']
-    const colors = ['RED', 'BLACK', 'WHITE', 'BLUE', 'SILVER', 'GRAY', 'GREY', 'YELLOW', 'BROWN', 'ORANGE', 'GREEN']
+    // Plate extraction: prefer patterns with both letters and digits, avoid 4-digit year matches
+    let plate = ''
+    const plateRegex = /([A-Z]{1,3})\s*[-\s]?\s*(\d{1,4})\s*[-\s]?\s*([A-Z]{0,3})/g
+    for (const m of upperSan.matchAll(plateRegex)) {
+      const cand = (m[1] + m[2] + (m[3] || '')).replace(/[-\s]/g, '')
+      if (/^(19|20)\d{2}$/.test(cand)) continue
+      if (/[A-Z]/.test(cand) && /\d/.test(cand)) { plate = cand; break }
+    }
+    // fallback older heuristics
+    if (!plate) {
+      const fallback = upperSan.match(/\b[A-Z]{1,3}\s*\d{2,4}\b/) || upperSan.match(/\b\d{2,4}\s*[A-Z]{1,3}\b/)
+      plate = fallback ? fallback[0].replace(/\s+/g, '') : ''
+    }
+    crPlate.value = plate || 'NDG 4819'
 
+    // Brand and color detection using sanitized text
+    const brands = ['HONDA','TOYOTA','YAMAHA','SUZUKI','KAWASAKI','MITSUBISHI','NISSAN','KTM','ISUZU']
+    const colors = ['RED','BLACK','WHITE','BLUE','SILVER','GRAY','GREY','YELLOW','BROWN','ORANGE','GREEN']
     let foundBrand = ''
     let foundColor = ''
-    for (const b of brands) { if (rawUpper.includes(b)) { foundBrand = b; break } }
-    for (const c of colors) { if (rawUpper.includes(c)) { foundColor = c; break } }
-
+    for (const b of brands) if (upperSan.includes(b)) { foundBrand = b; break }
+    for (const c of colors) if (upperSan.includes(c)) { foundColor = c; break }
     crBrand.value = foundBrand || 'YAMAHA'
     crColor.value = foundColor || 'BLACK'
 
-    // Model: attempt to find a 'MODEL' label or use a longer token match
+    // Model extraction: look for 'MODEL' label or 'TYPE' labels, clean punctuation
     let model = ''
     for (let i = 0; i < lines.length; i++) {
       const ln = lines[i]
       if (/MODEL\b/.test(ln) || /VEHICLE TYPE\b/.test(ln) || /TYPE OF VEHICLE\b/.test(ln)) {
-        // Prefer inline value after ':' or the next non-empty line
         const inline = ln.split(':')[1]
         if (inline && inline.trim().length > 1) { model = inline.trim(); break }
         model = (lines[i+1] || '').trim()
@@ -1200,24 +1212,29 @@ function parseOCRText(text, docType) {
       }
     }
     if (!model) {
-      // Fallback: capture multi-word tokens that look like model names (e.g., 'MIO SPORTY')
-      const modelMatch = text.match(/\b([A-Z0-9]{2,}\s?[A-Z0-9\s]{0,15}SPORTY|MIO SPORTY|AEROX|NMAX|CIVIC|VIOS|MIO|BEAT|CLICK|ADV)\b/i)
+      const modelMatch = upperSan.match(/\b([A-Z0-9]{2,}\s?[A-Z0-9\s]{0,15}SPORTY|MIO SPORTY|AEROX|NMAX|CIVIC|VIOS|MIO|BEAT|CLICK|ADV|PORTE|PORTE FE|PORTER)\b/i)
       if (modelMatch) model = modelMatch[0]
     }
+    model = model.replace(/^[:\-\s]+|[:\-\s]+$/g, '').replace(/\s{2,}/g, ' ')
     crModel.value = model ? model.toUpperCase() : 'MIO SPORTY'
 
-    // Owner: prefer inline owner labels like "OWNER'S NAME: ..." or 'REGISTERED OWNER'
+    // Owner extraction: prefer inline owner labels; otherwise pick the longest uppercase line with multiple words
     let foundOwner = ''
     for (let i = 0; i < lines.length; i++) {
       const ln = lines[i]
       const ownerInline = ln.match(/OWNER(?:'S)?\s*NAME[:\-\s]+(.+)/i) || ln.match(/REGISTERED OWNER[:\-\s]+(.+)/i) || ln.match(/OWNER[:\-\s]+(.+)/i)
       if (ownerInline && ownerInline[1]) { foundOwner = ownerInline[1].trim(); break }
-      if (/OWNER\b|NAME\b/.test(ln) && (lines[i+1] || '').trim()) {
-        // If label exists, take next line if inline not present
-        foundOwner = lines[i+1].trim(); break
-      }
+      if (/OWNER\b|NAME\b/.test(ln) && (lines[i+1] || '').trim()) { foundOwner = lines[i+1].trim(); break }
     }
-    // Clean owner string
+    if (!foundOwner || foundOwner.length < 4) {
+      // Fallback: choose the longest line with at least two words and >6 chars
+      let best = ''
+      for (const l of lines) {
+        const candidate = l.trim()
+        if (candidate.length > best.length && /[A-Z]/.test(candidate) && (candidate.split(/\s+/).length >= 2) && candidate.length > 6) best = candidate
+      }
+      foundOwner = best || foundOwner
+    }
     crOwnerName.value = (foundOwner.replace(/[^A-Z\s\.\,]/gi, ' ').replace(/\s+/g, ' ').trim() || licenseName.value || 'JUAN DELA CRUZ')
   }
 }
