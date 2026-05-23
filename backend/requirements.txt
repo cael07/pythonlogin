@@ -10,3 +10,6 @@ pydantic-settings
 python-dotenv
 Pillow
 websockets
+httpx
+easyocr
+

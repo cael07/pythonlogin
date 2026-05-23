@@ -372,16 +372,24 @@ const crOwnerName = ref('')
 const ocrLoading = ref(false)
 const ocrStatus = ref('')
 
-// Dynamic script loader for Tesseract.js
-const loadTesseract = () => {
-  return new Promise((resolve, reject) => {
-    if (window.Tesseract) return resolve(window.Tesseract)
-    const script = document.createElement('script')
-    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
-    script.onload = () => resolve(window.Tesseract)
-    script.onerror = () => reject(new Error('Tesseract script failed to load'))
-    document.head.appendChild(script)
+// ── Offline Local OCR helper ────────────────────────────────────────────────
+// Calls the backend /api/ocr which runs a local EasyOCR deep-learning pipeline
+// completely offline without any external network request.
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://pythonlogin-api.onrender.com/auth')
+  .replace(/\/auth\/?$/, '')  // strip /auth suffix to get root
+
+async function callOfflineOCR(imageBase64, docType) {
+  const resp = await fetch(`${API_BASE}/api/ocr`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_base64: imageBase64, doc_type: docType })
   })
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}))
+    throw new Error(err.error || `OCR service returned HTTP ${resp.status}`)
+  }
+  const data = await resp.json()
+  return data.text || ''
 }
 
 async function openCameraModal(docType) {
@@ -734,37 +742,24 @@ function onFileChange(event, docType) {
 
 async function runOCR(fileBase64, docType) {
   ocrLoading.value = true
-  ocrStatus.value = 'Loading OCR Neural Engines...'
+  ocrStatus.value = 'Processing with Local OCR...'
   error.value = ''
   
   try {
-    const Tesseract = await loadTesseract()
-    ocrStatus.value = 'Calibrating scanner...'
+    ocrStatus.value = 'Analyzing document offline...'
+    const text = await callOfflineOCR(fileBase64, docType)
     
-    const worker = await Tesseract.createWorker('eng')
+    console.log(`Offline OCR text for ${docType}:`, text)
     
-    // Configure Tesseract for maximum accuracy on Philippine IDs
-    try {
-      await worker.setParameters({
-        // PSM 6 = Assume a single uniform block of text (best for IDs)
-        tessedit_pageseg_mode: '6',
-        // Tell Tesseract the image is scanned at 300 DPI
-        user_defined_dpi: '300',
-        // Only expect these characters — avoids misreading @#$% etc.
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :',
-      })
-    } catch (paramErr) {
-      console.warn('Could not set Tesseract params (older build):', paramErr)
+    if (!text || text.trim().length < 10) {
+      error.value = 'OCR could not read this image. Please retake or upload a clearer photo.'
+      if (docType === 'license') licenseImage.value = null
+      else if (docType === 'or')  orImage.value = null
+      else if (docType === 'cr')  crImage.value = null
+      return
     }
 
-    ocrStatus.value = 'Decoding text on document...'
-    const ret = await worker.recognize(fileBase64)
-    const text = ret.data.text
-    await worker.terminate()
-    
-    console.log(`OCR Raw parsed text for ${docType}:`, text)
-    
-    // Validate document authenticity and type
+    // Validate document type
     const isValid = verifyDocumentText(text, docType)
     if (!isValid) {
       if (docType === 'license') {
@@ -780,14 +775,11 @@ async function runOCR(fileBase64, docType) {
       return
     }
     
-    ocrStatus.value = 'Extracting metadata...'
+    ocrStatus.value = 'Extracting fields...'
     parseOCRText(text, docType)
   } catch (err) {
-    console.warn("Tesseract OCR failed, falling back to simulated parser:", err)
-    ocrStatus.value = 'Extracting fields (Fallback)...'
-    setTimeout(() => {
-      generateRealisticFallback(docType)
-    }, 1000)
+    console.warn('Offline OCR failed:', err)
+    error.value = `OCR failed: ${err.message}. Please try uploading again.`
   } finally {
     ocrLoading.value = false
     ocrStatus.value = ''
@@ -860,14 +852,43 @@ function parseOCRText(text, docType) {
     licenseNumber.value = licNo || ''
     
     // 2. Full Name Parsing
+    // Google Vision reads the whole ID — we must skip header/label lines
+    const NAME_JUNK = /^(REPUBLIKA|PILIPINAS|PHILIPPINES|REPUBLIC|PANGALAN|PERMANENTE|ADDRESS|PETSA|DATE|KAPANGANAKAN|KASARIAN|SEX|TINDIG|HEIGHT|TIMBANG|WEIGHT|ORAS|TIME|LICENSE|DRIVER|LTO|LAND TRANS|NATIONALITY|BLOOD|RESTRICTION|CONDITION|CLASS|EXPIRES|EXPIRY|VALID|ISSUED|ISSUE|NO\.|NUMBER|NUMERO|MARK|CODE|AGENCY|OFFICIAL|SIGNATURE|THUMB|PRINT|FINGERPRINT|REPUBLIC OF|REPUBLIKA NG)/i
+    
     let foundName = ''
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes('NAME') || lines[i].includes('LAST') || lines[i].includes('FIRST')) {
-        foundName = lines[i+1] || lines[i+2] || ''
-        break
+      const line = lines[i]
+      // Look for the NAME / LAST NAME / PANGALAN label
+      if (line.match(/\bNAME\b|\bLAST\b|\bPANGALAN\b/)) {
+        // Check the next 1-2 lines for an actual name (all caps words, no junk labels)
+        for (let j = i + 1; j <= i + 2 && j < lines.length; j++) {
+          const candidate = lines[j].replace(/[^A-Z\s]/g, ' ').replace(/\s+/g, ' ').trim()
+          // A valid name line: 2+ words, each 2+ chars, not a label keyword
+          const words = candidate.split(' ').filter(w => w.length >= 2)
+          if (words.length >= 2 && !NAME_JUNK.test(candidate)) {
+            foundName = candidate
+            break
+          }
+        }
+        if (foundName) break
       }
     }
-    licenseName.value = foundName.replace(/[^A-Z\s]/g, ' ').replace(/\s+/g, ' ').trim() || 'LITERATUS CAESAR AUGUSTUS ESPUELAS'
+
+    // Fallback: scan all lines for the longest line of pure uppercase words
+    // that doesn't look like a label
+    if (!foundName) {
+      let best = ''
+      for (const line of lines) {
+        const candidate = line.replace(/[^A-Z\s]/g, ' ').replace(/\s+/g, ' ').trim()
+        const words = candidate.split(' ').filter(w => w.length >= 2)
+        if (words.length >= 2 && candidate.length > best.length && !NAME_JUNK.test(candidate)) {
+          best = candidate
+        }
+      }
+      foundName = best
+    }
+
+    licenseName.value = foundName.trim()
     
     // 3. Expiration Date Classification (Differentiating from Date of Birth)
     const allDates = []
