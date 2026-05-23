@@ -94,15 +94,15 @@
               
               <div class="form-group">
                 <label class="form-label">License Number</label>
-                <input v-model="licenseNumber" type="text" class="form-input" placeholder="e.g. J0123456789" />
+                <input v-model="licenseNumber" ref="licenseNumberInput" type="text" class="form-input" placeholder="e.g. J0123456789" />
               </div>
               <div class="form-group">
                 <label class="form-label">Full Name</label>
-                <input v-model="licenseName" type="text" class="form-input" placeholder="e.g. JUAN DELA CRUZ" />
+                <input v-model="licenseName" type="text" class="form-input" placeholder="e.g. JUAN DELA CRUZ" disabled />
               </div>
               <div class="form-group">
                 <label class="form-label">Expiry Date</label>
-                <input v-model="licenseExpiry" type="text" class="form-input" placeholder="e.g. YYYY-MM-DD" />
+                <input v-model="licenseExpiry" type="text" class="form-input" placeholder="e.g. YYYY-MM-DD" disabled />
               </div>
             </div>
 
@@ -359,6 +359,7 @@ const crImage = ref(null)
 const licenseNumber = ref('')
 const licenseName = ref('')
 const licenseExpiry = ref('')
+const licenseNumberInput = ref(null)
 
 const orRenewalDate = ref('')
 
@@ -611,10 +612,8 @@ function isDateBeforeToday(dateStr) {
 function verifyDocumentText(text, docType) {
   const upper = text.toUpperCase()
   if (docType === 'license') {
-    // License must contain LICENSE, LICENCE, DRIVER, LTO, REPUBLIKA, PILIPINAS, or TRANSPORTATION
-    return upper.includes('LICENSE') || upper.includes('LICENCE') || upper.includes('DRIVER') || 
-           upper.includes('REPUBLIC') || upper.includes('PILIPINAS') || upper.includes('LTO') || 
-           upper.includes('PANGALAN') || upper.includes('TRANSPORTATION')
+    // Just check if DRIVER or LICENSE or REPUBLIC exists anywhere in text (very relaxed regex to tolerate OCR typos)
+    return /\b(DRIV|LIC|L1C|DR1V|REPUBL|PILIP)/i.test(text)
   } else if (docType === 'or') {
     // Official Receipt must contain RECEIPT, OFFICIAL, PAYMENT, MVUC, or LTO
     return upper.includes('RECEIPT') || upper.includes('OFFICIAL') || upper.includes('PAYMENT') || 
@@ -771,11 +770,25 @@ async function runOCR(fileBase64, docType) {
     
     ocrStatus.value = 'Extracting fields...'
     parseOCRText(text, docType)
+    if (docType === 'license') {
+      setTimeout(() => {
+        if (licenseNumberInput.value) {
+          licenseNumberInput.value.focus()
+        }
+      }, 100)
+    }
   } catch (err) {
     console.warn("Tesseract OCR failed, falling back to simulated parser:", err)
     ocrStatus.value = 'Extracting fields (Fallback)...'
     setTimeout(() => {
       generateRealisticFallback(docType)
+      if (docType === 'license') {
+        setTimeout(() => {
+          if (licenseNumberInput.value) {
+            licenseNumberInput.value.focus()
+          }
+        }, 100)
+      }
     }, 1000)
   } finally {
     ocrLoading.value = false
@@ -1017,6 +1030,11 @@ function fillDemoData(docType) {
         licenseNumber.value = 'J0123456789'
         licenseName.value = 'EMMANUEL D. PASION'
         licenseExpiry.value = '2030-08-14'
+        setTimeout(() => {
+          if (licenseNumberInput.value) {
+            licenseNumberInput.value.focus()
+          }
+        }, 100)
       } else if (docType === 'or') {
         orImage.value = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
         orRenewalDate.value = '2027-04-12'
