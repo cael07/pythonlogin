@@ -111,7 +111,7 @@
             </div>
 
             <div class="btn-row">
-              <button class="btn btn-ghost" @click="licenseImage = null">↶ Retake</button>
+              <button class="btn btn-ghost btn-retake" @click="licenseImage = null">↶ Retake</button>
               <button class="btn btn-success" :disabled="!licenseNumber || !licenseName || isLicenseExpired" @click="goToStep(3)">Next Step ➔</button>
             </div>
           </div>
@@ -168,7 +168,7 @@
             </div>
 
             <div class="btn-row">
-              <button class="btn btn-ghost" @click="orImage = null">↶ Retake</button>
+              <button class="btn btn-ghost btn-retake" @click="orImage = null">↶ Retake</button>
               <button class="btn btn-success" :disabled="!orRenewalDate || isOrExpired" @click="goToStep(4)">Next Step ➔</button>
             </div>
           </div>
@@ -241,7 +241,7 @@
             </div>
 
             <div class="btn-row">
-              <button class="btn btn-ghost" @click="crImage = null">↶ Retake</button>
+              <button class="btn btn-ghost btn-retake" @click="crImage = null">↶ Retake</button>
               <button class="btn btn-success" :disabled="!crPlate || !crBrand || !crOwnerName" @click="goToStep(5)">Next Step ➔</button>
             </div>
           </div>
@@ -754,7 +754,7 @@ async function runOCR(fileBase64, docType) {
     if (!isValid) {
       if (docType === 'license') {
         licenseImage.value = null
-        error.value = "Incorrect document. The uploaded image does not appear to be a Philippine Driver's License."
+        error.value = "Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly."
       } else if (docType === 'or') {
         orImage.value = null
         error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
@@ -1276,6 +1276,14 @@ async function handleRegister(formData) {
 }
 .btn-row .btn {
   flex: 1;
+}
+.btn-retake {
+  background: #dc2626;
+  color: #fff;
+  border-color: #b91c1c;
+}
+.btn-retake:hover:not(:disabled) {
+  background: #c2410b;
 }
 
 /* Keyframes */
