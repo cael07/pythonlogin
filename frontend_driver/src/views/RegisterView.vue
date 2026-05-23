@@ -472,11 +472,20 @@ function isDateBeforeToday(dateStr) {
 function verifyDocumentText(text, docType) {
   const upper = text.toUpperCase()
   if (docType === 'license') {
-    return upper.includes('LICENSE') || upper.includes('DRIVER') || upper.includes('REPUBLIC')
+    // License must contain LICENSE or DRIVER, and NOT RECEIPT or REGISTRATION
+    const hasLicKeywords = upper.includes('LICENSE') || upper.includes('DRIVER') || upper.includes('REPUBLIC')
+    const isOrCr = upper.includes('RECEIPT') || upper.includes('REGISTRATION') || upper.includes('CR NO') || upper.includes('MVUC')
+    return hasLicKeywords && !isOrCr
   } else if (docType === 'or') {
-    return upper.includes('RECEIPT') || upper.includes('OFFICIAL') || upper.includes('PAYMENT') || upper.includes('NEXT REG')
+    // Official Receipt must contain RECEIPT or OFFICIAL or PAYMENT, and NOT CERTIFICATE OF REGISTRATION or CHASSIS NO
+    const hasOrKeywords = upper.includes('RECEIPT') || upper.includes('OFFICIAL') || upper.includes('PAYMENT') || upper.includes('NEXT REG') || upper.includes('MVUC')
+    const isCr = upper.includes('CERTIFICATE OF REGISTRATION') || upper.includes('VEHICLE CATEGORY') || upper.includes('CHASSIS NO') || upper.includes('CR NO')
+    return hasOrKeywords && !isCr
   } else if (docType === 'cr') {
-    return upper.includes('REGISTRATION') || upper.includes('CERTIFICATE') || upper.includes('CHASSIS') || upper.includes('CR NO') || upper.includes('PLATE NO')
+    // Certificate of Registration must contain REGISTRATION or CERTIFICATE or CHASSIS NO, and NOT NEXT REG RENEWAL or PAYMENT DETAILS
+    const hasCrKeywords = upper.includes('CERTIFICATE OF REGISTRATION') || upper.includes('CR NO') || (upper.includes('CERTIFICATE') && upper.includes('CHASSIS'))
+    const isOr = upper.includes('NEXT REG RENEWAL') || upper.includes('PAYMENT DETAILS') || upper.includes('MODE OF PAYMENT')
+    return hasCrKeywords && !isOr
   }
   return true
 }
@@ -490,13 +499,15 @@ function parseTextDates(text) {
     'JULY': '07', 'AUGUST': '08', 'SEPTEMBER': '09', 'OCTOBER': '10', 'NOVEMBER': '11', 'DECEMBER': '12'
   }
   
-  const textDateRegex = /\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\s+(\d{1,2})\s*,\s*(\d{4})\b|\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\s+(\d{1,2})\s+(\d{4})\b/gi
+  // Matches "JAN 1 2029", "JAN. 1, 2029", "JAN-1-2029", "MARCH 31 2029", etc.
+  const textDateRegex = /\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\.?\s*[-/,\s]?\s*(\d{1,2})\s*[-/,\s]?\s*(\d{4})\b/gi
   
   let match
+  textDateRegex.lastIndex = 0
   while ((match = textDateRegex.exec(text)) !== null) {
-    const monthName = (match[1] || match[4]).toUpperCase().slice(0, 3)
-    const day = match[2] || match[5]
-    const year = match[3] || match[6]
+    const monthName = match[1].toUpperCase().slice(0, 3)
+    const day = match[2]
+    const year = match[3]
     
     const monthNum = monthsMap[monthName]
     if (monthNum) {
@@ -506,6 +517,7 @@ function parseTextDates(text) {
   }
   
   const numericDateRegex = /\b(\d{4})[-/](\d{2})[-/](\d{2})\b|\b(\d{2})[-/](\d{2})[-/](\d{4})\b/g
+  numericDateRegex.lastIndex = 0
   while ((match = numericDateRegex.exec(text)) !== null) {
     if (match[1]) {
       dates.push(`${match[1]}-${match[2]}-${match[3]}`)
@@ -612,55 +624,47 @@ function parseOCRText(text, docType) {
   const rawUpper = text.toUpperCase()
   
   if (docType === 'license') {
-    // 1. Robust License Number Parsing with OCR Error Correction
-    const cleanText = text.replace(/[^A-Za-z0-9]/g, ' ').toUpperCase()
-    const words = cleanText.split(/\s+/)
-    let foundLic = ''
-    for (const word of words) {
-      if (word.length >= 9 && word.length <= 13) {
-        if (/[A-Z]/.test(word) && /[0-9]/.test(word)) {
-          foundLic = word
-          break
-        }
-      }
-    }
+        // 1. Robust License Number Parsing with OCR Error Correction
+    // Pattern matches J01-20-003021, JO1-2O-OO3O21, J0120003021, etc.
+    // 1 letter, then 2 alphanumeric, then optional separator, then 2 alphanumeric, then optional separator, then 6 alphanumeric
+    const licRegex = /\b([A-Z0-9])([A-Z0-9]{2})[-/\s]?([A-Z0-9]{2})[-/\s]?([A-Z0-9]{6})\b/i
+    const licMatch = text.match(licRegex)
     
-    if (foundLic) {
-      let firstChar = foundLic[0]
+    if (licMatch) {
+      let firstChar = licMatch[1].toUpperCase()
       if (/[0-9]/.test(firstChar)) {
         firstChar = 'J' // default LTO code prefix fallback
       }
       
-      let rest = foundLic.slice(1).replace(/[^A-Z0-9]/g, '')
-      let normalizedDigits = ''
-      for (const char of rest) {
-        if (/[0-9]/.test(char)) {
-          normalizedDigits += char
-        } else if (char === 'O' || char === 'Q' || char === 'D') {
-          normalizedDigits += '0'
-        } else if (char === 'I' || char === 'L' || char === 'T') {
-          normalizedDigits += '1'
-        } else if (char === 'S' || char === 'G') {
-          normalizedDigits += '5'
-        } else if (char === 'B') {
-          normalizedDigits += '8'
-        } else if (char === 'Z') {
-          normalizedDigits += '2'
-        } else if (char === 'A') {
-          normalizedDigits += '4'
-        } else {
-          normalizedDigits += '0'
+      const parts = [licMatch[2], licMatch[3], licMatch[4]]
+      const normalizedParts = parts.map(part => {
+        let normalized = ''
+        for (const char of part.toUpperCase()) {
+          if (/[0-9]/.test(char)) {
+            normalized += char
+          } else if (char === 'O' || char === 'Q' || char === 'D') {
+            normalized += '0'
+          } else if (char === 'I' || char === 'L' || char === 'T') {
+            normalized += '1'
+          } else if (char === 'S' || char === 'G') {
+            normalized += '5'
+          } else if (char === 'B') {
+            normalized += '8'
+          } else if (char === 'Z') {
+            normalized += '2'
+          } else if (char === 'A') {
+            normalized += '4'
+          } else {
+            normalized += '0'
+          }
         }
-      }
+        return normalized
+      })
       
-      while (normalizedDigits.length < 10) {
-        normalizedDigits += '0'
-      }
-      normalizedDigits = normalizedDigits.slice(0, 10)
-      licenseNumber.value = `${firstChar}${normalizedDigits.slice(0, 2)}-${normalizedDigits.slice(2, 4)}-${normalizedDigits.slice(4, 10)}`
+      licenseNumber.value = `${firstChar}${normalizedParts[0]}-${normalizedParts[1]}-${normalizedParts[2]}`
     } else {
-      const licMatch = text.match(/[A-Z]\d{2}-\d{2}-\d{6}/i)
-      licenseNumber.value = licMatch ? licMatch[0].toUpperCase() : 'J01-20-' + Math.floor(100000 + Math.random() * 900000)
+      const rawMatch = text.match(/[A-Z]\d{2}-\d{2}-\d{6}/i)
+      licenseNumber.value = rawMatch ? rawMatch[0].toUpperCase() : 'J01-20-' + Math.floor(100000 + Math.random() * 900000)
     }
     
     // 2. Full Name Parsing
