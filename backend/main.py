@@ -103,68 +103,7 @@ async def root():
     }
 
 
-# ── Offline Local OCR Endpoint using RapidOCR ────────────────────────────────
-# Processes the image locally using the memory-optimized RapidOCR ONNX pipeline.
-# Fully standalone, runs 100% offline, and uses very little memory (< 100MB RAM).
 
-import base64
-import io
-import numpy as np
-from PIL import Image
-from rapidocr_onnxruntime import RapidOCR
-from pydantic import BaseModel
 
-# Global RapidOCR instance (initialized lazily to speed up startup)
-_ocr_engine = None
-
-def get_ocr_engine():
-    global _ocr_engine
-    if _ocr_engine is None:
-        _ocr_engine = RapidOCR()
-    return _ocr_engine
-
-class OCRRequest(BaseModel):
-    image_base64: str   # full data-URL or raw base64
-    doc_type: str       # 'license' | 'or' | 'cr'
-
-@app.post("/api/ocr")
-async def ocr_document(body: OCRRequest):
-    # Strip the data-URL prefix if present (e.g. "data:image/jpeg;base64,...")
-    raw_b64 = body.image_base64
-    if "," in raw_b64:
-        raw_b64 = raw_b64.split(",", 1)[1]
-
-    try:
-        # Decode base64 to bytes
-        img_bytes = base64.b64decode(raw_b64)
-        
-        # Load image via Pillow and convert to RGB
-        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-        
-        # Convert to numpy array as expected by RapidOCR
-        img_np = np.array(img)
-        
-        # Get/initialize offline RapidOCR engine
-        engine = get_ocr_engine()
-        
-        # Run local offline OCR detection and recognition
-        # result is: [[bbox, text, confidence], ...] or None
-        result, elapse = engine(img_np)
-        
-        # Extract and join text segments with newlines
-        if result:
-            extracted_text = "\n".join([item[1] for item in result])
-        else:
-            extracted_text = ""
-            
-    except Exception as e:
-        import traceback
-        print(f"Offline OCR error:\n{traceback.format_exc()}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": f"Offline OCR failed: {str(e)}"}
-        )
-
-    return {"text": extracted_text, "doc_type": body.doc_type}
 
 
