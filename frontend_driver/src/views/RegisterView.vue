@@ -94,7 +94,7 @@
               
               <div class="form-group">
                 <label class="form-label">License Number</label>
-                <input v-model="licenseNumber" type="text" class="form-input" placeholder="e.g. N01-23-456789" />
+                <input v-model="licenseNumber" type="text" class="form-input" placeholder="e.g. J0123456789" />
               </div>
               <div class="form-group">
                 <label class="form-label">Full Name</label>
@@ -864,7 +864,8 @@ function parseOCRText(text, docType) {
       }
     }
 
-    licenseNumber.value = licNo || ''
+    // Always leave license number blank so user is forced to input it manually
+    licenseNumber.value = ''
     
     // 2. Full Name Parsing
     // The ID label row is "Last Name, First Name, Middle Name" (small text).
@@ -874,7 +875,15 @@ function parseOCRText(text, docType) {
 
     function cleanName(raw) {
       // Keep only letters, spaces and periods; collapse whitespace
-      return raw.replace(/[^A-Z\s.]/gi, ' ').replace(/\s+/g, ' ').trim()
+      let name = raw.replace(/[^A-Z\s.]/gi, ' ').replace(/\s+/g, ' ').trim()
+      
+      // Strip any stray 1-2 character OCR noise prefix (e.g. "I LITERATUS" -> "LITERATUS")
+      // Protect common Spanish/Filipino/Chinese last name prefixes and short names
+      const STRAY_LEADERS = /^(?!(?:DE|LA|EL|DA|DO|DI|MC|ST|SAN|STA|GO|YU|UY|SY|LO|SO|KO|HO|NG|LI|MA|LU|HE|XU|YE|SU|LE|OH|AN|DO|DU|TO|TY|VU|HA|IP)\b)[A-Z0-9]{1,2}\s+/i
+      while (STRAY_LEADERS.test(name)) {
+        name = name.replace(STRAY_LEADERS, '').trim()
+      }
+      return name
     }
 
     let foundName = ''
@@ -993,7 +1002,7 @@ function parseOCRText(text, docType) {
 
 function generateRealisticFallback(docType) {
   if (docType === 'license') {
-    licenseNumber.value = 'N01-26-847291'
+    licenseNumber.value = ''
     licenseName.value = 'JUAN DELA CRUZ'
     licenseExpiry.value = '2030-05-15'
   } else if (docType === 'or') {
@@ -1016,7 +1025,7 @@ function fillDemoData(docType) {
     setTimeout(() => {
       if (docType === 'license') {
         licenseImage.value = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
-        licenseNumber.value = 'N03-24-918237'
+        licenseNumber.value = 'J0123456789'
         licenseName.value = 'EMMANUEL D. PASION'
         licenseExpiry.value = '2030-08-14'
       } else if (docType === 'or') {
