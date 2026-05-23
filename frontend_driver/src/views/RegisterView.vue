@@ -828,9 +828,9 @@ function parseOCRText(text, docType) {
 
     let licNo = null
 
-    // Pass 1 – look near the "LICENSE NO" / "LIC. NO" label (most reliable)
-    // Tesseract sometimes reads hyphens as spaces, so we strip all spaces too
-    const labelZoneMatch = rawUpper.match(/LIC[A-Z.]*\s*NO[.:)#\s]+([A-Z0-9][A-Z0-9\s\-/.]{8,16})/i)
+    // Pass 1 – look near "LICENSE NO" / "LIC. NO" label
+    // Limit to 8-13 chars so we don't accidentally grab trailing text
+    const labelZoneMatch = rawUpper.match(/LIC[A-Z.]*\s*NO[.:)#\s]+([A-Z0-9][-A-Z0-9]{7,12})/i)
     if (labelZoneMatch) licNo = normaliseLicNo(labelZoneMatch[1].replace(/[\s\-]/g,''))
 
     // Pass 2 – strict hyphenated format exactly:  X00-00-000000
@@ -839,21 +839,19 @@ function parseOCRText(text, docType) {
       if (strict) licNo = `${strict[1].toUpperCase()}${strict[2]}-${strict[3]}-${strict[4]}`
     }
 
-    // Pass 3 – Tesseract space-separated:  X 00 00 000000 or X00 00 000000
+    // Pass 3 – Tesseract space-separated: X00 00 000000 (3 groups, matching J01 20 003021)
     if (!licNo) {
-      const spaced = text.match(/\b([A-Z][A-Z0-9]{0,2})\s+([A-Z0-9]{1,2})\s+([A-Z0-9]{1,2})\s+([A-Z0-9]{5,7})\b/i)
+      const spaced = text.match(/\b([A-Z][A-Z0-9]{2})\s+([A-Z0-9]{2})\s+([A-Z0-9]{6})\b/i)
       if (spaced) {
-        const candidate = spaced[1] + spaced[2] + spaced[3] + spaced[4]
-        licNo = normaliseLicNo(candidate.replace(/[^A-Z0-9]/gi, ''))
+        licNo = normaliseLicNo(spaced[1] + spaced[2] + spaced[3])
       }
     }
 
-    // Pass 4 – OCR-tolerant hyphenated:  X[A-Z0-9]{2}-[A-Z0-9]{2}-[A-Z0-9]{6}
+    // Pass 4 – OCR-tolerant: accepts space or hyphen between segments
     if (!licNo) {
       const tolerant = text.match(/\b([A-Z])([A-Z0-9]{2})[\-\s]([A-Z0-9]{2})[\-\s]([A-Z0-9]{6})\b/i)
       if (tolerant) {
-        const candidate = tolerant[1] + tolerant[2] + tolerant[3] + tolerant[4]
-        licNo = normaliseLicNo(candidate)
+        licNo = normaliseLicNo(tolerant[1] + tolerant[2] + tolerant[3] + tolerant[4])
       }
     }
 
@@ -869,32 +867,23 @@ function parseOCRText(text, docType) {
     licenseNumber.value = licNo || ''
     
     // 2. Full Name Parsing
-    // Tesseract may split label lines e.g. "PANGALAN" as "PA" on one line and name on next.
-    // We skip any line that looks like a label fragment or Philippines header.
-    const NAME_JUNK = /^(REPUBLIKA|PILIPINAS|PHILIPPINES|REPUBLIC|PANGALAN|PERMANENTE|ADDRESS|PETSA|DATE|KAPANGANAKAN|KASARIAN|SEX|TINDIG|HEIGHT|TIMBANG|WEIGHT|ORAS|TIME|LICENSE|DRIVER|LTO|LAND TRANS|NATIONALITY|BLOOD|RESTRICTION|CONDITION|CLASS|EXPIRES|EXPIRY|VALID|ISSUED|ISSUE|NO\.|NUMBER|NUMERO|MARK|CODE|AGENCY|OFFICIAL|SIGNATURE|THUMB|PRINT|FINGERPRINT|REPUBLIC OF|REPUBLIKA NG)/i
-
-    // Strip common Tesseract label prefix fragments that appear before or with the name
-    // e.g. "PA DELA CRUZ" → "DELA CRUZ", "PANGALAN SANTOS" → "SANTOS"
-    const LEADING_JUNK_RE = /^(PA\.?\s*N?G?A?L?A?N?\.?|PA\.?|PAN\.?|PANG\.?|NG\.?|LAST\s*NAME\.?|FIRST\s*NAME\.?|NAME\s*:|PANGALAN\s*:|REPUBLIC\s*OF\s*(THE\s*)?PHILIPPINES\.?)\s*/i
+    // The ID label row is "Last Name, First Name, Middle Name" (small text).
+    // The actual name is on the NEXT line e.g. "LITERATUS, CAESAR AUGUSTUS ESPUELAS".
+    // We must NEVER use the label line itself as the name.
+    const NAME_JUNK = /^(REPUBLIKA|PILIPINAS|PHILIPPINES|REPUBLIC|PANGALAN|PERMANENTE|ADDRESS|PETSA|DATE|KAPANGANAKAN|KASARIAN|SEX|TINDIG|HEIGHT|TIMBANG|WEIGHT|ORAS|TIME|LICENSE|DRIVER|LTO|LAND TRANS|NATIONALITY|BLOOD|RESTRICTION|CONDITION|CLASS|EXPIRES|EXPIRY|VALID|ISSUED|ISSUE|NO\.|NUMBER|NUMERO|MARK|CODE|AGENCY|OFFICIAL|SIGNATURE|THUMB|PRINT|FINGERPRINT|REPUBLIC OF|REPUBLIKA NG|FIRST|MIDDLE|LAST|TYPE|EYES|COLOR|DEPARTMENT|TRANSPORTATION|OFFICE)/i
 
     function cleanName(raw) {
-      return raw.replace(LEADING_JUNK_RE, '').replace(/[^A-Z\s.]/gi, ' ').replace(/\s+/g, ' ').trim()
+      // Keep only letters, spaces and periods; collapse whitespace
+      return raw.replace(/[^A-Z\s.]/gi, ' ').replace(/\s+/g, ' ').trim()
     }
 
     let foundName = ''
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
-      // Look for the NAME / LAST NAME / PANGALAN label line
+      // Find a label line containing NAME / LAST / PANGALAN
       if (line.match(/\bNAME\b|\bLAST\b|\bPANGALAN\b/)) {
-        // Check if the name is on the same line (after the label)
-        const sameLine = cleanName(line)
-        const sameWords = sameLine.split(' ').filter(w => w.length >= 2)
-        if (sameWords.length >= 2 && !NAME_JUNK.test(sameLine)) {
-          foundName = sameLine
-          break
-        }
-        // Otherwise check the next 1-2 lines
-        for (let j = i + 1; j <= i + 2 && j < lines.length; j++) {
+        // NEVER use the label line itself — look at the NEXT 1-3 lines
+        for (let j = i + 1; j <= i + 3 && j < lines.length; j++) {
           const candidate = cleanName(lines[j])
           const words = candidate.split(' ').filter(w => w.length >= 2)
           if (words.length >= 2 && !NAME_JUNK.test(candidate)) {
@@ -906,7 +895,7 @@ function parseOCRText(text, docType) {
       }
     }
 
-    // Fallback: scan all lines for the longest line of pure uppercase words
+    // Fallback: pick the longest valid name-looking line
     if (!foundName) {
       let best = ''
       for (const line of lines) {
