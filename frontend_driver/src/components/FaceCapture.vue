@@ -340,7 +340,7 @@ async function validateCapturedImage(dataUrl) {
   const ratio = distL / (distR || 1)
   return ratio > 0.8 && ratio < 1.25
 }
-}
+ 
 
 /* ── Load models ────────────────────────────────────────── */
 async function init() {
