@@ -231,22 +231,15 @@ function triggerCapture() {
 
   countdownInterval = setInterval(async () => {
     if (currentPose !== 'front' || !faceAligned.value) {
-      alignmentGrace += 1
-      hint.value = 'Hold front facing. Capture will abort if you move.'
-    } else {
-      alignmentGrace = 0
-      hint.value = `📸 Hold still… ${faceCountdown.value}`
-    }
-
-    // Allow a few brief frames of noise, but do not tolerate left/right/no-face during capture.
-    if (alignmentGrace > 3) {
+      // Abort immediately when the face leaves the front pose during capture.
       clearInterval(countdownInterval)
       countdownInterval = null
       faceCountdown.value = 0
       captureInProgress = false
       isScanSuccess.value = false
-      scanStage.value = 2
-      hint.value = 'Capture aborted: keep front-facing and try again.'
+      scanStage.value = 0
+      currentPose = 'none'
+      hint.value = 'Face LEFT — hold your face in the front view when ready.'
       rafId = requestAnimationFrame(detectionLoop)
       return
     }
