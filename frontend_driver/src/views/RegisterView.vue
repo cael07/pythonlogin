@@ -946,23 +946,45 @@ async function runOCR(fileBase64, docType) {
       }
       
       const ocrResult = await response.json()
-      
+
       if (!ocrResult.success) {
         throw new Error(ocrResult.error || 'OCR processing failed')
       }
-      
-      const text = ocrResult.text
+
+      const text = ocrResult.text || ''
       console.log(`EasyOCR text for CR:`, text)
-      console.log(`Extracted fields:`, ocrResult.fields)
-      
-      // Validate document type
+      console.log(`Extracted fields from backend:`, ocrResult.fields)
+
+      // Prefer backend-extracted structured fields when available
+      if (ocrResult.fields && Object.keys(ocrResult.fields).length) {
+        const f = ocrResult.fields
+        crPlate.value = (f.plate_number || f.plate || f.cr_plate || '').toString().toUpperCase() || crPlate.value
+        crBrand.value = (f.brand || f.make || '').toString().toUpperCase() || crBrand.value
+        // For model we expect Year Model -> use provided 'model' or year
+        crModel.value = (f.model || f.year || '').toString() || crModel.value
+        crColor.value = (f.color || '').toString().toUpperCase() || crColor.value
+        crOwnerName.value = (f.owner_name || f.owner || '').toString().toUpperCase() || crOwnerName.value
+
+        // If backend provided text, still validate it's a CR
+        const isValid = verifyDocumentText(text, docType)
+        if (!isValid) {
+          crImage.value = null
+          error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
+          return
+        }
+
+        ocrStatus.value = 'Fields applied from OCR service.'
+        return
+      }
+
+      // Fallback to parsing raw OCR text on the frontend
+      console.warn('Backend returned no structured fields; falling back to parseOCRText')
       const isValid = verifyDocumentText(text, docType)
       if (!isValid) {
         crImage.value = null
         error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
         return
       }
-      
       ocrStatus.value = 'Extracting fields...'
       parseOCRText(text, docType)
       
