@@ -192,14 +192,26 @@ async function detectionLoop() {
           faceCountdown.value = 0
           captureInProgress = false
           isScanSuccess.value = false
-          scanStage.value = 2
-          hint.value = 'Face FRONT — hold still'
+          scanStage.value = 0
+          currentPose = 'none'
+          hint.value = 'Face LEFT'
           rafId = requestAnimationFrame(detectionLoop)
           return
         }
       }
     } else {
       currentPose = 'none'
+      if (scanStage.value === 3 && captureInProgress) {
+        clearInterval(countdownInterval)
+        countdownInterval = null
+        faceCountdown.value = 0
+        captureInProgress = false
+        isScanSuccess.value = false
+        scanStage.value = 0
+        hint.value = 'Face LEFT'
+        rafId = requestAnimationFrame(detectionLoop)
+        return
+      }
       if (!captureInProgress) {
         hint.value = 'Position your face in the circle'
       }
