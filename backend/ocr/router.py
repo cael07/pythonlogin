@@ -4,19 +4,31 @@ import base64
 import io
 import cv2
 import numpy as np
-import easyocr
 from PIL import Image
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
 
 # Initialize EasyOCR reader (cached for performance)
 reader = None
+_reader_error = None
 
 def get_reader():
-    global reader
-    if reader is None:
+    """Lazy-initialize EasyOCR reader. If EasyOCR (or its dependencies) fail to
+    import/initialize, cache the error and raise a RuntimeError so the caller
+    can return a friendly error instead of crashing the whole app at import time.
+    """
+    global reader, _reader_error
+    if reader is not None:
+        return reader
+    if _reader_error is not None:
+        raise RuntimeError(f"EasyOCR initialization failed: {_reader_error}")
+    try:
+        import easyocr
         reader = easyocr.Reader(['en'], gpu=False)
-    return reader
+        return reader
+    except Exception as e:
+        _reader_error = e
+        raise RuntimeError(f"EasyOCR initialization failed: {e}")
 
 class OCRRequest(BaseModel):
     image_base64: str
