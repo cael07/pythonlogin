@@ -159,7 +159,7 @@
               
               <div class="form-group">
                 <label class="form-label">OR Renewal Date</label>
-                <input v-model="orRenewalDate" type="text" class="form-input" placeholder="e.g. YYYY-MM-DD" />
+                <input v-model="orRenewalDate" type="text" class="form-input" placeholder="e.g. YYYY-MM-DD" readonly />
               </div>
             </div>
 
@@ -224,19 +224,13 @@
                   <input v-model="crBrand" type="text" class="form-input" placeholder="e.g. YAMAHA" />
                 </div>
               </div>
-              <div class="form-row-2">
-                <div class="form-group">
-                  <label class="form-label">Model</label>
-                  <input v-model="crModel" type="text" class="form-input" placeholder="e.g. MIO SPORTY" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Color</label>
-                  <input v-model="crColor" type="text" class="form-input" placeholder="e.g. BLACK" />
-                </div>
+              <div class="form-group">
+                <label class="form-label">Color</label>
+                <input v-model="crColor" type="text" class="form-input" placeholder="e.g. BLACK" readonly />
               </div>
               <div class="form-group">
                 <label class="form-label">Owner's Name</label>
-                <input v-model="crOwnerName" type="text" class="form-input" placeholder="e.g. JUAN DELA CRUZ" />
+                <input v-model="crOwnerName" type="text" class="form-input" placeholder="e.g. JUAN DELA CRUZ" readonly />
               </div>
             </div>
 
