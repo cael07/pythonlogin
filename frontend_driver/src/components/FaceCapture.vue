@@ -128,7 +128,7 @@ function isFaceInOval(box, w, h) {
 /* ── Detection loop ─────────────────────────────────────── */
 async function detectionLoop() {
   const video = videoEl.value
-  if (!video || !modelsReady || captureInProgress) return
+  if (!video || !modelsReady) return
 
   const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
 
@@ -188,19 +188,43 @@ async function detectionLoop() {
 /* ── Capture photo ──────────────────────────────────────── */
 function triggerCapture() {
   if (captureInProgress) return
+  // mark countdown in progress but keep detectionLoop running so we can monitor alignment
   captureInProgress = true
-  cancelAnimationFrame(rafId)
-
-  // 3-second countdown before capturing
   faceCountdown.value = 3
 
-  countdownInterval = setInterval(() => {
+  countdownInterval = setInterval(async () => {
+    // If alignment lost during countdown, cancel and reset to left view
+    if (!faceAligned.value) {
+      clearInterval(countdownInterval)
+      countdownInterval = null
+      faceCountdown.value = 0
+      captureInProgress = false
+      isScanSuccess.value = false
+      scanStage.value = 0
+      hint.value = 'Face LEFT'
+      // ensure detectionLoop runs
+      rafId = requestAnimationFrame(detectionLoop)
+      return
+    }
+
     faceCountdown.value--
     if (faceCountdown.value > 0) {
       hint.value = `📸 Hold still… ${faceCountdown.value}`
     } else {
       clearInterval(countdownInterval)
       countdownInterval = null
+      // Final alignment check before capture
+      if (!faceAligned.value) {
+        // abort and reset
+        faceCountdown.value = 0
+        captureInProgress = false
+        isScanSuccess.value = false
+        scanStage.value = 0
+        hint.value = 'Face LEFT'
+        rafId = requestAnimationFrame(detectionLoop)
+        return
+      }
+
       // Take the photo
       const video = videoEl.value
       if (!video) return
@@ -209,41 +233,111 @@ function triggerCapture() {
       c.height = video.videoHeight
       const ctx = c.getContext('2d')
       ctx.drawImage(video, 0, 0)
-      capturedImg.value = c.toDataURL('image/jpeg', 0.92)
+      const dataUrl = c.toDataURL('image/jpeg', 0.92)
+
+      // Validate captured image: not blurry and contains front-facing face
+      try {
+        const valid = await validateCapturedImage(dataUrl)
+        if (!valid) {
+          // Failed quality check: notify user and reset
+          faceCountdown.value = 0
+          captureInProgress = false
+          isScanSuccess.value = false
+          scanStage.value = 0
+          hint.value = 'Image unclear or not frontal — please retake'
+          // continue detection loop
+          rafId = requestAnimationFrame(detectionLoop)
+          return
+        }
+      } catch (err) {
+        console.warn('Validation error', err)
+        faceCountdown.value = 0
+        captureInProgress = false
+        isScanSuccess.value = false
+        scanStage.value = 0
+        hint.value = 'Capture failed validation — please retake'
+        rafId = requestAnimationFrame(detectionLoop)
+        return
+      }
+
+      // Passed validation — accept capture
+      capturedImg.value = dataUrl
       stopCamera()
       uiState.value = 'captured'
       emit('captured', capturedImg.value)
-    }
-  }, 1000)
-}
-
-/* ── Camera control ─────────────────────────────────────── */
-function stopCamera() {
-  if (rafId) cancelAnimationFrame(rafId)
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop())
-    stream = null
-  }
-}
-
-async function startCamera() {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: 'user' },
-    })
-    const video = videoEl.value
-    if (!video) return
-    video.srcObject = stream
-    await new Promise(res => { video.onloadedmetadata = res })
-    await video.play()
-
-    hint.value = 'Align your face inside the circle'
-    uiState.value = 'scanning'
-    rafId = requestAnimationFrame(detectionLoop)
-  } catch (err) {
     hint.value = 'Camera access denied.'
     uiState.value = 'error'
   }
+
+// Validate captured image for blur and face frontalness
+async function validateCapturedImage(dataUrl) {
+  // 1) Blur check using Laplacian variance
+  function isBlurry(img) {
+    const canvas = document.createElement('canvas')
+    const w = Math.max(320, Math.min(640, img.naturalWidth))
+    const h = Math.round(img.naturalHeight * (w / img.naturalWidth))
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0, w, h)
+    const imageData = ctx.getImageData(0, 0, w, h)
+    const data = imageData.data
+    // grayscale
+    const gray = new Float32Array(w * h)
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+      gray[j] = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]
+    }
+    // Laplacian kernel convolution (3x3) -> compute response and variance
+    const lap = new Float32Array((w-2)*(h-2))
+    let sum = 0
+    let sumSq = 0
+    for (let y = 1; y < h-1; y++) {
+      for (let x = 1; x < w-1; x++) {
+        const i = y * w + x
+        const val = (4*gray[i] - gray[i-1] - gray[i+1] - gray[i-w] - gray[i+w])
+        const idx = (y-1)*(w-2) + (x-1)
+        lap[idx] = val
+        sum += val
+        sumSq += val*val
+      }
+    }
+    const n = lap.length || 1
+    const mean = sum / n
+    const variance = sumSq / n - mean*mean
+    // threshold empirically chosen — adjust if needed
+    return variance < 60
+  }
+
+  // 2) Face check using face-api on an Image element
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = reject
+    image.src = dataUrl
+  })
+
+  // Blur test
+  if (isBlurry(img)) return false
+
+  // Face detection on captured image
+  const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.5 })
+  const detection = await faceapi.detectSingleFace(img, opts).withFaceLandmarks(true)
+  if (!detection) return false
+
+  // Must be reasonably centered/frontal
+  const aligned = isFaceInOval(detection.detection.box, img.naturalWidth, img.naturalHeight)
+  if (!aligned) return false
+
+  // Check eye symmetry (ratio close to 1)
+  const landmarks = detection.landmarks
+  const nose = landmarks.getNose()[3]
+  const left = landmarks.getLeftEye()[0]
+  const right = landmarks.getRightEye()[3]
+  const distL = Math.abs(nose.x - left.x)
+  const distR = Math.abs(nose.x - right.x)
+  const ratio = distL / (distR || 1)
+  return ratio > 0.8 && ratio < 1.25
+}
 }
 
 /* ── Load models ────────────────────────────────────────── */
