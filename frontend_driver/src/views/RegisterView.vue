@@ -217,11 +217,11 @@
               <div class="form-row-2">
                 <div class="form-group">
                   <label class="form-label">Plate Number</label>
-                  <input v-model="crPlate" type="text" class="form-input" placeholder="e.g. NDG 4819" />
+                  <input v-model="crPlate" type="text" class="form-input" placeholder="e.g. NDG 4819" readonly />
                 </div>
                 <div class="form-group">
                   <label class="form-label">Brand</label>
-                  <input v-model="crBrand" type="text" class="form-input" placeholder="e.g. YAMAHA" />
+                  <input v-model="crBrand" type="text" class="form-input" placeholder="e.g. YAMAHA" readonly />
                 </div>
               </div>
               <div class="form-group">
