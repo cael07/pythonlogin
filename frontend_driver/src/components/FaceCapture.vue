@@ -112,6 +112,7 @@ let modelsReady     = false
 let captureInProgress = false
 let captureTimer    = null
 let countdownInterval = null
+let currentPose     = 'none'
 
 /* ── Geometry helpers ───────────────────────────────────── */
 function isFaceInOval(box, w, h) {
@@ -123,6 +124,13 @@ function isFaceInOval(box, w, h) {
   const isCentered = dist < (w * 0.3)
   const isCorrectSize = box.width > (w * 0.25) && box.width < (w * 0.75)
   return isCentered && isCorrectSize
+}
+
+function getFacePose(ratio) {
+  if (ratio > 1.4) return 'left'
+  if (ratio < 0.7) return 'right'
+  if (ratio > 0.8 && ratio < 1.25) return 'front'
+  return 'none'
 }
 
 /* ── Detection loop ─────────────────────────────────────── */
@@ -152,32 +160,47 @@ async function detectionLoop() {
       const distL = Math.abs(nose.x - left.x)
       const distR = Math.abs(nose.x - right.x)
       const ratio = distL / (distR || 1)
+      const pose = getFacePose(ratio)
+      currentPose = pose
 
       if (scanStage.value === 0) {
         hint.value = 'Face LEFT'
-        // Lower threshold (1.4 instead of 1.6)
-        if (ratio > 1.4) {
+        if (pose === 'left') {
           scanStage.value = 1
           hint.value = 'Face RIGHT'
         }
       } else if (scanStage.value === 1) {
         hint.value = 'Face RIGHT'
-        // Higher threshold (0.7 instead of 0.6)
-        if (ratio < 0.7) {
+        if (pose === 'right') {
           scanStage.value = 2
           hint.value = 'Face FRONT'
         }
       } else if (scanStage.value === 2) {
         hint.value = 'Face FRONT'
-        if (ratio > 0.8 && ratio < 1.25) {
+        if (pose === 'front') {
           scanStage.value = 3
           isScanSuccess.value = true
           hint.value = '📸 Hold still… 3'
           triggerCapture()
           return
         }
+      } else if (scanStage.value === 3) {
+        // Keep the front stage active while waiting for capture.
+        hint.value = 'Face FRONT'
+        if (captureInProgress && pose !== 'front') {
+          clearInterval(countdownInterval)
+          countdownInterval = null
+          faceCountdown.value = 0
+          captureInProgress = false
+          isScanSuccess.value = false
+          scanStage.value = 2
+          hint.value = 'Face FRONT'
+          rafId = requestAnimationFrame(detectionLoop)
+          return
+        }
       }
     } else {
+      currentPose = 'none'
       hint.value = 'Position your face in the circle'
     }
   } catch (_) { /* skip frame */ }
@@ -194,13 +217,13 @@ function triggerCapture() {
   let alignmentGrace = 0
 
   countdownInterval = setInterval(async () => {
-    if (!faceAligned.value) {
+    if (currentPose !== 'front' || !faceAligned.value) {
       alignmentGrace += 1
     } else {
       alignmentGrace = 0
     }
 
-    // Allow a few brief misalignment frames during the countdown.
+    // Allow a few brief frames of noise, but do not tolerate left/right/no-face during capture.
     if (alignmentGrace > 2) {
       clearInterval(countdownInterval)
       countdownInterval = null
@@ -209,7 +232,6 @@ function triggerCapture() {
       isScanSuccess.value = false
       scanStage.value = 2
       hint.value = 'Face FRONT'
-      // ensure detectionLoop runs
       rafId = requestAnimationFrame(detectionLoop)
       return
     }
@@ -220,9 +242,8 @@ function triggerCapture() {
     } else {
       clearInterval(countdownInterval)
       countdownInterval = null
-      // Final alignment check before capture
-      if (!faceAligned.value) {
-        // abort and reset to front stage instead of left
+      // Final pose/alignment check before capture
+      if (currentPose !== 'front' || !faceAligned.value) {
         faceCountdown.value = 0
         captureInProgress = false
         isScanSuccess.value = false
