@@ -265,9 +265,11 @@ function triggerCapture() {
       stopCamera()
       uiState.value = 'captured'
       emit('captured', capturedImg.value)
-    hint.value = 'Camera access denied.'
-    uiState.value = 'error'
-  }
+      // close the countdown interval and exit
+      return
+    }
+  }, 1000)
+}
 
 // Validate captured image for blur and face frontalness
 async function validateCapturedImage(dataUrl) {
