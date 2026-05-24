@@ -191,10 +191,17 @@ function triggerCapture() {
   // mark countdown in progress but keep detectionLoop running so we can monitor alignment
   captureInProgress = true
   faceCountdown.value = 3
+  let alignmentGrace = 0
 
   countdownInterval = setInterval(async () => {
-    // If alignment lost during countdown, cancel and reset to left view
     if (!faceAligned.value) {
+      alignmentGrace += 1
+    } else {
+      alignmentGrace = 0
+    }
+
+    // Allow one brief misalignment during the countdown.
+    if (alignmentGrace > 1) {
       clearInterval(countdownInterval)
       countdownInterval = null
       faceCountdown.value = 0
@@ -265,7 +272,6 @@ function triggerCapture() {
       stopCamera()
       uiState.value = 'captured'
       emit('captured', capturedImg.value)
-      // close the countdown interval and exit
       return
     }
   }, 1000)
