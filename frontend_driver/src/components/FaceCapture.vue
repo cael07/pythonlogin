@@ -341,6 +341,40 @@ async function validateCapturedImage(dataUrl) {
   return ratio > 0.8 && ratio < 1.25
 }
  
+// ── Camera control (start/stop) ───────────────────────
+function stopCamera() {
+  if (rafId) cancelAnimationFrame(rafId)
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop())
+    stream = null
+  }
+  if (videoEl.value) {
+    videoEl.value.srcObject = null
+  }
+}
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: 'user' },
+      audio: false
+    })
+    const video = videoEl.value
+    if (!video) return
+    video.srcObject = stream
+    await new Promise(res => { video.onloadedmetadata = res })
+    await video.play()
+
+    hint.value = 'Align your face inside the circle'
+    uiState.value = 'scanning'
+    rafId = requestAnimationFrame(detectionLoop)
+  } catch (err) {
+    console.error('Camera error', err)
+    hint.value = 'Camera access denied.'
+    uiState.value = 'error'
+  }
+}
+
 
 /* ── Load models ────────────────────────────────────────── */
 async function init() {
