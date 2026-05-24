@@ -1174,7 +1174,7 @@ function parseOCRText(text, docType) {
 
     function extractField(labels, rejectGeneric = false) {
       const upperLabels = labels.map(l => l.toUpperCase())
-      const genericTokens = /\b(VEHICLE|MOTOR|TYPE|CATEGORY|WITHOUT|SIDE|CAR|FUEL|CAPACITY|ENGINE|CHASSIS|OWNER|MODEL|YEAR|MAKE|BRAND|REGISTERED|CERTIFICATE|REGISTRATION)\b/i
+      const genericTokens = /\b(VEHICLE|MOTOR|TYPE|CATEGORY|WITHOUT|SIDE|CAR|FUEL|ENGINE|CHASSIS|FILE|MODEL|YEAR|MAKE|BRAND|OWNER|REGISTERED|CERTIFICATE|REGISTRATION|OFFICIAL|DEPARTMENT|TRANSPORTATION)\b/i
 
       for (let i = 0; i < upperLines.length; i++) {
         const upper = upperLines[i]
@@ -1203,21 +1203,48 @@ function parseOCRText(text, docType) {
     const plateRaw = extractField(['PLATE NO', 'PLATE NO.', 'PLATE NUMBER', 'PLATE'], true)
     let plate = ''
     if (plateRaw) {
-      const normalized = plateRaw.toUpperCase().replace(/[^A-Z0-9\s\-]/g, ' ').replace(/\s+/g, ' ').trim()
-      const match = normalized.match(/([A-Z0-9]{1,3})\s*[-\s]?\s*([A-Z0-9]{1,4})\s*([A-Z]{0,3})/i)
-      plate = match ? (match[1] + match[2] + (match[3] || '')).toUpperCase() : normalized.replace(/\s+/g, '')
+      const normalized = plateRaw.toUpperCase().replace(/[^A-Z0-9]/g, ' ')
+      const candidates = [...normalized.matchAll(/\b([A-Z]{1,3}\d{2,4}[A-Z]{1,3})\b/g)]
+        .map(m => m[1])
+        .filter(c => c.length >= 5 && c.length <= 7)
+      if (candidates.length) {
+        plate = candidates.sort((a, b) => a.length - b.length)[0]
+      } else {
+        const fallback = normalized.replace(/\s+/g, '').match(/^[A-Z]{1,3}\d{2,4}[A-Z]{1,3}/)
+        plate = fallback ? fallback[0] : ''
+      }
     }
     crPlate.value = plate
 
+    const KNOWN_BRANDS = ['HONDA', 'YAMAHA', 'SUZUKI', 'KAWASAKI', 'TOYOTA', 'NISSAN', 'ISUZU', 'MITSUBISHI', 'MAZDA', 'HYUNDAI', 'KIA', 'FORD', 'CHEVROLET', 'HINO']
+    function matchKnownBrand() {
+      for (const brand of KNOWN_BRANDS) {
+        if (rawUpper.includes(brand)) {
+          return brand
+        }
+      }
+      return ''
+    }
+
     const brandRaw = extractField(['MAKE/BRAND', 'MAKE', 'BRAND'], true)
-    const brandCand = brandRaw.toUpperCase().replace(/[^A-Z\s]/g, '').trim()
-    const genericBrand = /\b(MOTOR|VEHICLE|TYPE|CATEGORY|WITHOUT|SIDE|CAR|FUEL)\b/i.test(brandCand)
-    crBrand.value = (!genericBrand && brandCand) ? brandCand : ''
+    const brandCand = brandRaw.toUpperCase().replace(/[^A-Z\s]/g, ' ').trim()
+    const knownBrand = KNOWN_BRANDS.find(b => brandCand.includes(b)) || matchKnownBrand()
+    crBrand.value = knownBrand || brandCand || ''
+
+    const KNOWN_COLORS = ['BLACK', 'WHITE', 'RED', 'BLUE', 'GREEN', 'YELLOW', 'BROWN', 'SILVER', 'GRAY', 'GREY', 'ORANGE', 'GOLD', 'MAROON', 'BEIGE']
+    function matchKnownColor() {
+      for (const color of KNOWN_COLORS) {
+        if (rawUpper.includes(color)) {
+          return color
+        }
+      }
+      return ''
+    }
 
     const colorRaw = extractField(['COLOR'], true)
-    const colorCand = colorRaw.toUpperCase().replace(/[^A-Z\s]/g, '').trim()
-    const genericColor = /\b(TYPE OF|FUEL|VEHICLE|MOTOR|MODEL|YEAR|MAKE|BRAND|OWNER|CAPACITY|CATEGORY)\b/i.test(colorCand)
-    crColor.value = (!genericColor && colorCand) ? colorCand : ''
+    const colorCand = colorRaw.toUpperCase().replace(/[^A-Z\s]/g, ' ').trim()
+    const knownColor = KNOWN_COLORS.find(c => colorCand.includes(c)) || matchKnownColor()
+    crColor.value = knownColor || colorCand.split(/\s+/)[0] || ''
 
     let model = extractField(['YEAR MODEL', 'YEAR MODEL (NEW/USED IMPORTED CBU)'], true)
     if (!model) {
@@ -1226,10 +1253,27 @@ function parseOCRText(text, docType) {
         model = linesRaw[yearLineIndex + 1].trim()
       }
     }
-    let yearMatch = model.match(/\b(19|20)\d{2}\b/)
+    const yearMatch = model.match(/\b(19|20)\d{2}\b/)
     crModel.value = yearMatch ? yearMatch[0] : ''
 
-    let owner = extractField(["OWNER'S NAME", "OWNERS NAME", 'OWNER NAME', 'REGISTERED OWNER'], true)
+    let owner = extractField(["OWNER'S NAME", "OWNERS NAME", 'OWNER NAME', 'REGISTERED OWNER'], false)
+    if (!owner || owner.split(/\s+/).length < 2 || owner.length < 8) {
+      const ownerIndex = upperLines.findIndex((l, idx) => /OWNER\b/.test(l) && linesRaw[idx + 1])
+      if (ownerIndex !== -1) {
+        for (let j = ownerIndex + 1; j <= ownerIndex + 3 && j < linesRaw.length; j++) {
+          const candidate = linesRaw[j].trim()
+          if (candidate.length > 10 && /\s/.test(candidate) && !/\b(MOTOR|VEHICLE|TYPE|FUEL|MODEL|YEAR|MAKE|BRAND|ENGINE|CHASSIS|FILE|REGISTRATION|CERTIFICATE|OFFICIAL|DEPARTMENT|TRANSPORTATION)\b/i.test(candidate)) {
+            owner = candidate
+            break
+          }
+        }
+      }
+    }
+    if (!owner || owner.split(/\s+/).length < 2 || owner.length < 8) {
+      owner = linesRaw
+        .filter(l => l.length > 10 && /\s/.test(l) && !/\b(MOTOR|VEHICLE|TYPE|FUEL|MODEL|YEAR|MAKE|BRAND|ENGINE|CHASSIS|FILE|REGISTRATION|CERTIFICATE|OFFICIAL|DEPARTMENT|TRANSPORTATION)\b/i.test(l))
+        .sort((a, b) => b.length - a.length)[0] || ''
+    }
     crOwnerName.value = owner.replace(/[^A-Z\s\.\,]/gi, ' ').replace(/\s+/g, ' ').trim()
   }
 }
