@@ -922,131 +922,71 @@ function detectDocumentBounds(imageData) {
 
 async function runOCR(fileBase64, docType) {
   ocrLoading.value = true
-  ocrStatus.value = 'Loading OCR Neural Engines...'
+  ocrStatus.value = 'Preparing image for OCR...'
   error.value = ''
-  
+
   try {
-    if (docType === 'cr') {
-      // Use backend EasyOCR for CR documents
-      ocrStatus.value = 'Sending to OCR service...'
-      
-      const response = await fetch('https://pythonlogin-api.onrender.com/api/ocr/process-cr', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          image_base64: fileBase64,
-          doc_type: 'cr'
-        })
+    const Tesseract = await loadTesseract()
+    ocrStatus.value = 'Preprocessing image...'
+
+    // Preprocess in-browser for better CR recognition: deskew, crop, threshold
+    const ocrBase64 = await preprocessDocumentImage(fileBase64)
+
+    ocrStatus.value = 'Calibrating OCR engine...'
+    const worker = await Tesseract.createWorker('eng')
+
+    try {
+      // For CR documents use auto page segmentation (PSM 1) to better detect tables/labels
+      const psm = docType === 'cr' ? '1' : '6'
+      await worker.setParameters({
+        tessedit_pageseg_mode: psm,
+        user_defined_dpi: '300',
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :()'
       })
-      
-      if (!response.ok) {
-        throw new Error(`Backend OCR failed: ${response.statusText}`)
-      }
-      
-      const ocrResult = await response.json()
+    } catch (paramErr) {
+      console.warn('Could not set Tesseract params:', paramErr)
+    }
 
-      if (!ocrResult.success) {
-        throw new Error(ocrResult.error || 'OCR processing failed')
-      }
+    ocrStatus.value = 'Running OCR...'
+    const ret = await worker.recognize(ocrBase64)
+    const text = ret.data.text
+    await worker.terminate()
 
-      const text = ocrResult.text || ''
-      console.log(`EasyOCR text for CR:`, text)
-      console.log(`Extracted fields from backend:`, ocrResult.fields)
+    console.log(`OCR Raw parsed text for ${docType}:`, text)
+    console.log('OCR confidence:', ret.data.confidence || 'N/A')
 
-      // Prefer backend-extracted structured fields when available
-      if (ocrResult.fields && Object.keys(ocrResult.fields).length) {
-        const f = ocrResult.fields
-        crPlate.value = (f.plate_number || f.plate || f.cr_plate || '').toString().toUpperCase() || crPlate.value
-        crBrand.value = (f.brand || f.make || '').toString().toUpperCase() || crBrand.value
-        // For model we expect Year Model -> use provided 'model' or year
-        crModel.value = (f.model || f.year || '').toString() || crModel.value
-        crColor.value = (f.color || '').toString().toUpperCase() || crColor.value
-        crOwnerName.value = (f.owner_name || f.owner || '').toString().toUpperCase() || crOwnerName.value
-
-        // If backend provided text, still validate it's a CR
-        const isValid = verifyDocumentText(text, docType)
-        if (!isValid) {
-          crImage.value = null
-          error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
-          return
-        }
-
-        ocrStatus.value = 'Fields applied from OCR service.'
-        return
-      }
-
-      // Fallback to parsing raw OCR text on the frontend
-      console.warn('Backend returned no structured fields; falling back to parseOCRText')
-      const isValid = verifyDocumentText(text, docType)
-      if (!isValid) {
+    // Validate document type
+    const isValid = verifyDocumentText(text, docType)
+    if (!isValid) {
+      if (docType === 'license') {
+        licenseImage.value = null
+        error.value = "Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly."
+      } else if (docType === 'or') {
+        orImage.value = null
+        error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
+      } else if (docType === 'cr') {
         crImage.value = null
         error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
-        return
       }
-      ocrStatus.value = 'Extracting fields...'
-      parseOCRText(text, docType)
-      
-    } else {
-      // Use Tesseract for License and OR documents
-      const Tesseract = await loadTesseract()
-      ocrStatus.value = 'Calibrating scanner...'
-      
-      const worker = await Tesseract.createWorker('eng')
-      
-      // Configure Tesseract for maximum accuracy on Philippine IDs
-      try {
-        await worker.setParameters({
-          tessedit_pageseg_mode: '6',
-          user_defined_dpi: '300',
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :',
-        })
-      } catch (paramErr) {
-        console.warn('Could not set Tesseract params (older build):', paramErr)
-      }
-
-      ocrStatus.value = 'Decoding text on document...'
-      const ret = await worker.recognize(fileBase64)
-      const text = ret.data.text
-      await worker.terminate()
-      
-      console.log(`OCR Raw parsed text for ${docType}:`, text)
-      
-      // Validate document type
-      const isValid = verifyDocumentText(text, docType)
-      if (!isValid) {
-        if (docType === 'license') {
-          licenseImage.value = null
-          error.value = "Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly."
-        } else if (docType === 'or') {
-          orImage.value = null
-          error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
-        }
-        return
-      }
-      
-      ocrStatus.value = 'Extracting fields...'
-      parseOCRText(text, docType)
+      return
     }
+
+    ocrStatus.value = 'Extracting fields...'
+    parseOCRText(text, docType)
 
     if (docType === 'license') {
       setTimeout(() => {
-        if (licenseNumberInput.value) {
-          licenseNumberInput.value.focus()
-        }
+        if (licenseNumberInput.value) licenseNumberInput.value.focus()
       }, 100)
     }
   } catch (err) {
-    console.warn("OCR failed, falling back to simulated parser:", err)
+    console.warn('OCR failed, falling back to simulated parser:', err)
     ocrStatus.value = 'Extracting fields (Fallback)...'
     setTimeout(() => {
       generateRealisticFallback(docType)
       if (docType === 'license') {
         setTimeout(() => {
-          if (licenseNumberInput.value) {
-            licenseNumberInput.value.focus()
-          }
+          if (licenseNumberInput.value) licenseNumberInput.value.focus()
         }, 100)
       }
     }, 1000)

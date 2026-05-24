@@ -11,7 +11,5 @@ python-dotenv
 Pillow
 websockets
 httpx
-easyocr
-opencv-python-headless
-numpy
+# Note: heavy OCR deps removed for Render compatibility. Use Tesseract.js (frontend) instead.
 
