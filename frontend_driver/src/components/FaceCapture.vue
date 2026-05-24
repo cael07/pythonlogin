@@ -185,7 +185,6 @@ async function detectionLoop() {
           return
         }
       } else if (scanStage.value === 3) {
-        // Keep the front stage active while waiting for capture.
         hint.value = 'Face FRONT'
         if (captureInProgress && pose !== 'front') {
           clearInterval(countdownInterval)
@@ -194,14 +193,16 @@ async function detectionLoop() {
           captureInProgress = false
           isScanSuccess.value = false
           scanStage.value = 2
-          hint.value = 'Face FRONT'
+          hint.value = 'Face FRONT — hold still'
           rafId = requestAnimationFrame(detectionLoop)
           return
         }
       }
     } else {
       currentPose = 'none'
-      hint.value = 'Position your face in the circle'
+      if (!captureInProgress) {
+        hint.value = 'Position your face in the circle'
+      }
     }
   } catch (_) { /* skip frame */ }
 
@@ -219,26 +220,30 @@ function triggerCapture() {
   countdownInterval = setInterval(async () => {
     if (currentPose !== 'front' || !faceAligned.value) {
       alignmentGrace += 1
+      hint.value = 'Hold front facing. Capture will abort if you move.'
     } else {
       alignmentGrace = 0
+      hint.value = `📸 Hold still… ${faceCountdown.value}`
     }
 
     // Allow a few brief frames of noise, but do not tolerate left/right/no-face during capture.
-    if (alignmentGrace > 2) {
+    if (alignmentGrace > 3) {
       clearInterval(countdownInterval)
       countdownInterval = null
       faceCountdown.value = 0
       captureInProgress = false
       isScanSuccess.value = false
       scanStage.value = 2
-      hint.value = 'Face FRONT'
+      hint.value = 'Capture aborted: keep front-facing and try again.'
       rafId = requestAnimationFrame(detectionLoop)
       return
     }
 
     faceCountdown.value--
     if (faceCountdown.value > 0) {
-      hint.value = `📸 Hold still… ${faceCountdown.value}`
+      if (currentPose === 'front' && faceAligned.value) {
+        hint.value = `📸 Hold still… ${faceCountdown.value}`
+      }
     } else {
       clearInterval(countdownInterval)
       countdownInterval = null
