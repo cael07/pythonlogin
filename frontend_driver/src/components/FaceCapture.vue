@@ -200,15 +200,15 @@ function triggerCapture() {
       alignmentGrace = 0
     }
 
-    // Allow one brief misalignment during the countdown.
-    if (alignmentGrace > 1) {
+    // Allow a few brief misalignment frames during the countdown.
+    if (alignmentGrace > 2) {
       clearInterval(countdownInterval)
       countdownInterval = null
       faceCountdown.value = 0
       captureInProgress = false
       isScanSuccess.value = false
-      scanStage.value = 0
-      hint.value = 'Face LEFT'
+      scanStage.value = 2
+      hint.value = 'Face FRONT'
       // ensure detectionLoop runs
       rafId = requestAnimationFrame(detectionLoop)
       return
@@ -222,12 +222,12 @@ function triggerCapture() {
       countdownInterval = null
       // Final alignment check before capture
       if (!faceAligned.value) {
-        // abort and reset
+        // abort and reset to front stage instead of left
         faceCountdown.value = 0
         captureInProgress = false
         isScanSuccess.value = false
-        scanStage.value = 0
-        hint.value = 'Face LEFT'
+        scanStage.value = 2
+        hint.value = 'Face FRONT'
         rafId = requestAnimationFrame(detectionLoop)
         return
       }
