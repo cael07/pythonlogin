@@ -547,8 +547,6 @@ async function triggerDocCapture() {
   colorCtx.drawImage(video, 0, 0, w, h)
   const colorBase64 = colorCanvas.toDataURL('image/jpeg', 0.95)
 
-  const ocrBase64 = await preprocessDocumentImage(colorBase64)
-
   const docType = activeCaptureType.value
   // Store COLOR image for preview
   if (docType === 'license')     licenseImage.value = colorBase64
@@ -556,8 +554,8 @@ async function triggerDocCapture() {
   else if (docType === 'cr')     crImage.value = colorBase64
 
   closeCameraModal()
-  // Run OCR on the grayscale-enhanced version for better accuracy
-  await runOCR(ocrBase64, docType)
+  // Run OCR on the preserved full-color capture; runOCR will preprocess only CR documents.
+  await runOCR(colorBase64, docType)
 }
 
 function switchMode(mode) {
@@ -700,8 +698,7 @@ function onFileChange(event, docType) {
       crImage.value = colorBase64
     }
     
-      const ocrBase64 = await preprocessDocumentImage(colorBase64)
-    await runOCR(ocrBase64, docType)
+    await runOCR(colorBase64, docType)
   }
   reader.readAsDataURL(file)
 }
@@ -929,8 +926,8 @@ async function runOCR(fileBase64, docType) {
     const Tesseract = await loadTesseract()
     ocrStatus.value = 'Preprocessing image...'
 
-    // Preprocess in-browser for better CR recognition: deskew, crop, threshold
-    const ocrBase64 = await preprocessDocumentImage(fileBase64)
+    // Only preprocess CR documents aggressively. OR receipts and licenses are better recognized from the original capture.
+    const ocrBase64 = docType === 'cr' ? await preprocessDocumentImage(fileBase64) : fileBase64
 
     ocrStatus.value = 'Calibrating OCR engine...'
     const worker = await Tesseract.createWorker('eng')
