@@ -1003,20 +1003,15 @@ async function runOCR(fileBase64, docType) {
       return
     }
 
-    // For CR documents, try RapidOCR first (isolated path). If RapidOCR fails, fall back to Tesseract for CR only.
-    let rapid = null
+    // For CR documents, use RapidOCR exclusively for testing. If RapidOCR fails, return an error (no Tesseract fallback).
     try {
-      rapid = await loadRapidOCR()
-    } catch (e) {
-      console.warn('RapidOCR not available for CR, will use Tesseract instead:', e)
-    }
-
-    if (rapid) {
+      const rapid = await loadRapidOCR()
       ocrStatus.value = 'Running RapidOCR (CR)...'
       let rawResult = null
       try {
         rawResult = await rapid.recognize(ocrBase64, { lang: 'eng', psm: '1' })
       } catch (e) {
+        // fallback to simpler call if options unsupported
         rawResult = await rapid.recognize(ocrBase64)
       }
       const text = (rawResult && (rawResult.text || rawResult.data || rawResult)) || ''
@@ -1032,36 +1027,12 @@ async function runOCR(fileBase64, docType) {
       ocrStatus.value = 'Extracting fields...'
       parseOCRText(text, 'cr')
       return
-    }
-
-    // RapidOCR unavailable or failed — use Tesseract for CR as fallback
-    const Tesseract = await loadTesseract()
-    ocrStatus.value = 'Calibrating OCR engine...'
-    const worker = await Tesseract.createWorker('eng')
-    try {
-      await worker.setParameters({
-        tessedit_pageseg_mode: '1',
-        user_defined_dpi: '300',
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :()'
-      })
-    } catch (paramErr) {
-      console.warn('Could not set Tesseract params for CR:', paramErr)
-    }
-    ocrStatus.value = 'Running OCR...'
-    const ret = await worker.recognize(ocrBase64)
-    const text = ret.data.text
-    await worker.terminate()
-    console.log('Tesseract Raw parsed text for CR:', text)
-
-    const isValid = verifyDocumentText(text, 'cr')
-    if (!isValid) {
+    } catch (e) {
+      console.warn('RapidOCR failed for CR:', e)
       crImage.value = null
-      error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
+      error.value = 'RapidOCR failed for CR. Please retry capture or use Upload mode.'
       return
     }
-
-    ocrStatus.value = 'Extracting fields...'
-    parseOCRText(text, 'cr')
   } catch (err) {
     console.warn('OCR failed, falling back to simulated parser:', err)
     ocrStatus.value = 'Extracting fields (Fallback)...'
@@ -1342,6 +1313,34 @@ function parseOCRText(text, docType) {
       crModel.value = model.replace(/\b(19|20)\d{2}\b/, '').trim() || model.trim()
     } else {
       crModel.value = ''
+    }
+
+    // Fallback 1: search lines that contain 'YEAR' for an inline year (covers "YEAR MODEL 2026")
+    if (!crYear.value) {
+      for (let i = 0; i < upperLines.length; i++) {
+        if (upperLines[i].includes('YEAR')) {
+          const m = upperLines[i].match(/\b(19|20)\d{2}\b/)
+          if (m) { crYear.value = m[0]; break }
+          const nextLine = linesRaw[i+1] || ''
+          const m2 = nextLine.match(/\b(19|20)\d{2}\b/)
+          if (m2) { crYear.value = m2[0]; break }
+        }
+      }
+    }
+
+    // Fallback 2: pick the most plausible year from the whole document (recent year)
+    if (!crYear.value) {
+      const allYears = [...rawUpper.matchAll(/\b(19|20)\d{2}\b/g)].map(m => m[0])
+      if (allYears.length) {
+        const currentYear = new Date().getFullYear()
+        const candidates = allYears
+          .map(y => parseInt(y, 10))
+          .filter(y => y >= 1900 && y <= currentYear + 1)
+        if (candidates.length) {
+          // prefer the maximum plausible year (e.g., 2026)
+          crYear.value = String(Math.max(...candidates))
+        }
+      }
     }
 
     let owner = extractField(["OWNER'S NAME", "OWNERS NAME", 'OWNER NAME', 'REGISTERED OWNER'], false)
