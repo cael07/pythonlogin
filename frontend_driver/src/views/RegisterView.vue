@@ -1065,6 +1065,7 @@ async function runOCR(fileBase64, docType) {
         if (licenseNumberInput.value) licenseNumberInput.value.focus()
       }, 100)
     }
+  }
   } catch (err) {
     console.warn('OCR failed, falling back to simulated parser:', err)
     ocrStatus.value = 'Extracting fields (Fallback)...'
