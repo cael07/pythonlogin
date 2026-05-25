@@ -392,10 +392,10 @@ const loadRapidOCR = async () => {
 
   const rapidUrlCandidates = [
     // Try local vendor first (useful on Render or when you drop the file into public/vendor)
-    '/vendor/rapidocr.min.js',
-    '/rapidocr.min.js',
-    'https://unpkg.com/rapidocr@latest/dist/rapidocr.min.js',
-    'https://cdn.jsdelivr.net/npm/rapidocr@latest/dist/rapidocr.min.js'
+    '/vendor/rapidocr.js',
+    '/rapidocr.js',
+    'https://unpkg.com/rapidocr@latest/dist/rapidocr.js',
+    'https://cdn.jsdelivr.net/npm/rapidocr@latest/dist/rapidocr.js'
   ]
 
   for (const url of rapidUrlCandidates) {
