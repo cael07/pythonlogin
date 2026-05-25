@@ -391,6 +391,9 @@ const loadRapidOCR = async () => {
   }
 
   const rapidUrlCandidates = [
+    // Try local vendor first (useful on Render or when you drop the file into public/vendor)
+    '/vendor/rapidocr.min.js',
+    '/rapidocr.min.js',
     'https://unpkg.com/rapidocr@latest/dist/rapidocr.min.js',
     'https://cdn.jsdelivr.net/npm/rapidocr@latest/dist/rapidocr.min.js'
   ]
@@ -1004,23 +1007,35 @@ async function runOCR(fileBase64, docType) {
     }
 
     // For CR documents, use RapidOCR exclusively for testing. If RapidOCR fails, return an error (no Tesseract fallback).
+    // Try RapidOCR first, but fall back to Tesseract for CR if RapidOCR fails.
+    // For development: use RapidOCR exclusively for CR and surface any RapidOCR error
     try {
-      const rapid = await loadRapidOCR()
+      const rapidEngine = await loadRapidOCR()
       ocrStatus.value = 'Running RapidOCR (CR)...'
       let rawResult = null
       try {
-        rawResult = await rapid.recognize(ocrBase64, { lang: 'eng', psm: '1' })
+        rawResult = await rapidEngine.recognize(ocrBase64, { lang: 'eng', psm: '1' })
       } catch (e) {
-        // fallback to simpler call if options unsupported
-        rawResult = await rapid.recognize(ocrBase64)
+        try { rawResult = await rapidEngine.recognize(ocrBase64) } catch (e2) { rawResult = null; console.warn('RapidOCR recognize error fallback:', e, e2); throw e2 || e }
       }
+
       const text = (rawResult && (rawResult.text || rawResult.data || rawResult)) || ''
-      console.log(`RapidOCR Raw parsed text for CR:`, text)
+      console.log('RapidOCR Raw parsed text for CR:', text)
+
+      if (!text) {
+        crImage.value = null
+        const msg = 'RapidOCR returned empty text for CR.'
+        console.warn(msg)
+        error.value = `RapidOCR error: ${msg}`
+        return
+      }
 
       const isValid = verifyDocumentText(text, 'cr')
       if (!isValid) {
         crImage.value = null
-        error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
+        const msg = 'RapidOCR returned text but did not validate as CR.'
+        console.warn(msg, text)
+        error.value = `RapidOCR error: ${msg} RawText="${text.slice(0,200)}"`
         return
       }
 
@@ -1030,7 +1045,8 @@ async function runOCR(fileBase64, docType) {
     } catch (e) {
       console.warn('RapidOCR failed for CR:', e)
       crImage.value = null
-      error.value = 'RapidOCR failed for CR. Please retry capture or use Upload mode.'
+      // Surface the raw error to the UI so you can copy it for debugging
+      error.value = `RapidOCR error: ${e && e.message ? e.message : String(e)}`
       return
     }
   } catch (err) {
