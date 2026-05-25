@@ -224,9 +224,15 @@
                   <input v-model="crBrand" type="text" class="form-input" placeholder="e.g. YAMAHA" readonly />
                 </div>
               </div>
-              <div class="form-group">
-                <label class="form-label">Color</label>
-                <input v-model="crColor" type="text" class="form-input" placeholder="e.g. BLACK" readonly />
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label class="form-label">Color</label>
+                  <input v-model="crColor" type="text" class="form-input" placeholder="e.g. BLACK" readonly />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Year</label>
+                  <input v-model="crYear" type="text" class="form-input" placeholder="e.g. 2019" readonly />
+                </div>
               </div>
               <div class="form-group">
                 <label class="form-label">Owner's Name</label>
@@ -358,6 +364,7 @@ const crPlate = ref('')
 const crBrand = ref('')
 const crColor = ref('')
 const crModel = ref('')
+const crYear = ref('')
 const crOwnerName = ref('')
 
 // OCR scanning indicator states
@@ -1328,8 +1335,14 @@ function parseOCRText(text, docType) {
         model = linesRaw[yearLineIndex + 1].trim()
       }
     }
-    const yearMatch = model.match(/\b(19|20)\d{2}\b/)
-    crModel.value = yearMatch ? yearMatch[0] : ''
+    const yearMatch = model ? model.match(/\b(19|20)\d{2}\b/) : null
+    crYear.value = yearMatch ? yearMatch[0] : ''
+    // Keep `crModel` as the textual model (exclude the year if present)
+    if (model) {
+      crModel.value = model.replace(/\b(19|20)\d{2}\b/, '').trim() || model.trim()
+    } else {
+      crModel.value = ''
+    }
 
     let owner = extractField(["OWNER'S NAME", "OWNERS NAME", 'OWNER NAME', 'REGISTERED OWNER'], false)
     if (!owner || owner.split(/\s+/).length < 2 || owner.length < 8) {
@@ -1365,6 +1378,7 @@ function generateRealisticFallback(docType) {
     crBrand.value = 'YAMAHA'
     crColor.value = 'BLACK'
     crModel.value = 'MIO SPORTY'
+    crYear.value = '2019'
     crOwnerName.value = 'JUAN DELA CRUZ'
   }
 }
@@ -1417,6 +1431,7 @@ async function handleRegister(formData) {
       cr_brand: crBrand.value,
       cr_color: crColor.value,
       cr_model: crModel.value,
+      cr_year: crYear.value,
       cr_owner_name: crOwnerName.value,
       license_image: licenseImage.value,
       or_image: orImage.value,
