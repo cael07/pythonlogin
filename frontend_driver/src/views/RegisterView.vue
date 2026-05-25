@@ -969,29 +969,22 @@ async function runOCR(fileBase64, docType) {
   error.value = ''
 
   try {
-    // Load preferred OCR engine (RapidOCR primary, Tesseract fallback)
     const ocrEngine = await loadOCREngine()
     ocrStatus.value = 'Preprocessing image...'
-
-    // Only preprocess CR documents aggressively. OR receipts and licenses are better recognized from the original capture.
     const ocrBase64 = docType === 'cr' ? await preprocessDocumentImage(fileBase64) : fileBase64
 
     if (ocrEngine.name === 'rapidocr') {
       ocrStatus.value = 'Running RapidOCR...'
-      // RapidOCR API surface differs between implementations. Try common patterns.
       let rawResult = null
       try {
-        // Some RapidOCR builds expose `recognize(base64, opts)` returning { text }
         rawResult = await ocrEngine.recognize(ocrBase64, { lang: 'eng', psm: docType === 'cr' ? '1' : '6' })
       } catch (e) {
-        // Try calling with single arg
         rawResult = await ocrEngine.recognize(ocrBase64)
       }
 
       const text = (rawResult && (rawResult.text || rawResult.data || rawResult)) || ''
       console.log(`RapidOCR Raw parsed text for ${docType}:`, text)
 
-      // Validate document type
       const isValid = verifyDocumentText(text, docType)
       if (!isValid) {
         if (docType === 'license') {
@@ -1009,15 +1002,12 @@ async function runOCR(fileBase64, docType) {
 
       ocrStatus.value = 'Extracting fields...'
       parseOCRText(text, docType)
-
       if (docType === 'license') {
         setTimeout(() => {
           if (licenseNumberInput.value) licenseNumberInput.value.focus()
         }, 100)
       }
-      // End RapidOCR branch
     } else {
-      // Tesseract fallback path (kept intact)
       const Tesseract = ocrEngine.instance || await loadTesseract()
       ocrStatus.value = 'Calibrating OCR engine...'
       const worker = await Tesseract.createWorker('eng')
@@ -1041,31 +1031,29 @@ async function runOCR(fileBase64, docType) {
       console.log(`OCR Raw parsed text for ${docType}:`, text)
       console.log('OCR confidence:', ret.data.confidence || 'N/A')
 
-    // Validate document type
-    const isValid = verifyDocumentText(text, docType)
-    if (!isValid) {
-      if (docType === 'license') {
-        licenseImage.value = null
-        error.value = "Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly."
-      } else if (docType === 'or') {
-        orImage.value = null
-        error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
-      } else if (docType === 'cr') {
-        crImage.value = null
-        error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
+      const isValid = verifyDocumentText(text, docType)
+      if (!isValid) {
+        if (docType === 'license') {
+          licenseImage.value = null
+          error.value = "Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly."
+        } else if (docType === 'or') {
+          orImage.value = null
+          error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
+        } else if (docType === 'cr') {
+          crImage.value = null
+          error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
+        }
+        return
       }
-      return
-    }
 
-    ocrStatus.value = 'Extracting fields...'
-    parseOCRText(text, docType)
-
-    if (docType === 'license') {
-      setTimeout(() => {
-        if (licenseNumberInput.value) licenseNumberInput.value.focus()
-      }, 100)
+      ocrStatus.value = 'Extracting fields...'
+      parseOCRText(text, docType)
+      if (docType === 'license') {
+        setTimeout(() => {
+          if (licenseNumberInput.value) licenseNumberInput.value.focus()
+        }, 100)
+      }
     }
-  }
   } catch (err) {
     console.warn('OCR failed, falling back to simulated parser:', err)
     ocrStatus.value = 'Extracting fields (Fallback)...'
