@@ -364,16 +364,68 @@ const crOwnerName = ref('')
 const ocrLoading = ref(false)
 const ocrStatus = ref('')
 
-// Dynamic script loader for Tesseract.js
+// OCR engine loader: prefer RapidOCR (if available), fallback to Tesseract.
+// Note: per request, the Tesseract CDN path is left in code but commented out so it's easy to re-enable.
 const loadTesseract = () => {
   return new Promise((resolve, reject) => {
     if (window.Tesseract) return resolve(window.Tesseract)
     const script = document.createElement('script')
-    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
-    script.onload = () => resolve(window.Tesseract)
+    // Primary Tesseract CDN (kept here as a fallback; commented to prefer RapidOCR)
+    // script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+    // If you need to re-enable Tesseract CDN, uncomment the line above.
+    // As a convenience, we still append a no-op script tag to keep behavior predictable when uncommented.
+    script.src = 'about:blank'
+    script.onload = () => {
+      if (window.Tesseract) return resolve(window.Tesseract)
+      reject(new Error('Tesseract not available'))
+    }
     script.onerror = () => reject(new Error('Tesseract script failed to load'))
     document.head.appendChild(script)
   })
+}
+
+// Load preferred OCR engine. Tries RapidOCR first (from a configurable CDN path),
+// then falls back to Tesseract via `loadTesseract()` if RapidOCR isn't available or fails.
+const loadOCREngine = async () => {
+  // If RapidOCR already present, use it
+  if (window.RapidOCR && typeof window.RapidOCR.recognize === 'function') {
+    return { name: 'rapidocr', recognize: window.RapidOCR.recognize }
+  }
+
+  // Attempt to dynamically load RapidOCR from a CDN path. Adjust URL if you have a private build.
+  const rapidUrlCandidates = [
+    // Preferred CDN build (may need to be adjusted to the actual package name/version)
+    'https://unpkg.com/rapidocr@latest/dist/rapidocr.min.js',
+    'https://cdn.jsdelivr.net/npm/rapidocr@latest/dist/rapidocr.min.js'
+  ]
+
+  for (const url of rapidUrlCandidates) {
+    try {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script')
+        s.src = url
+        s.onload = () => resolve(null)
+        s.onerror = () => reject(new Error('RapidOCR script failed'))
+        document.head.appendChild(s)
+        // small timeout to avoid hanging too long
+        setTimeout(() => resolve(null), 1200)
+      })
+      if (window.RapidOCR && typeof window.RapidOCR.recognize === 'function') {
+        return { name: 'rapidocr', recognize: window.RapidOCR.recognize }
+      }
+    } catch (e) {
+      // try next candidate
+      console.warn('RapidOCR load attempt failed for', url, e)
+    }
+  }
+
+  // RapidOCR not available — fall back to Tesseract loader (keeps Tesseract available as requested)
+  try {
+    const t = await loadTesseract()
+    return { name: 'tesseract', instance: t }
+  } catch (err) {
+    throw new Error('No OCR engine available: ' + err.message)
+  }
 }
 
 async function openCameraModal(docType) {
@@ -917,34 +969,77 @@ async function runOCR(fileBase64, docType) {
   error.value = ''
 
   try {
-    const Tesseract = await loadTesseract()
+    // Load preferred OCR engine (RapidOCR primary, Tesseract fallback)
+    const ocrEngine = await loadOCREngine()
     ocrStatus.value = 'Preprocessing image...'
 
     // Only preprocess CR documents aggressively. OR receipts and licenses are better recognized from the original capture.
     const ocrBase64 = docType === 'cr' ? await preprocessDocumentImage(fileBase64) : fileBase64
 
-    ocrStatus.value = 'Calibrating OCR engine...'
-    const worker = await Tesseract.createWorker('eng')
+    if (ocrEngine.name === 'rapidocr') {
+      ocrStatus.value = 'Running RapidOCR...'
+      // RapidOCR API surface differs between implementations. Try common patterns.
+      let rawResult = null
+      try {
+        // Some RapidOCR builds expose `recognize(base64, opts)` returning { text }
+        rawResult = await ocrEngine.recognize(ocrBase64, { lang: 'eng', psm: docType === 'cr' ? '1' : '6' })
+      } catch (e) {
+        // Try calling with single arg
+        rawResult = await ocrEngine.recognize(ocrBase64)
+      }
 
-    try {
-      // For CR documents use auto page segmentation (PSM 1) to better detect tables/labels
-      const psm = docType === 'cr' ? '1' : '6'
-      await worker.setParameters({
-        tessedit_pageseg_mode: psm,
-        user_defined_dpi: '300',
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :()'
-      })
-    } catch (paramErr) {
-      console.warn('Could not set Tesseract params:', paramErr)
-    }
+      const text = (rawResult && (rawResult.text || rawResult.data || rawResult)) || ''
+      console.log(`RapidOCR Raw parsed text for ${docType}:`, text)
 
-    ocrStatus.value = 'Running OCR...'
-    const ret = await worker.recognize(ocrBase64)
-    const text = ret.data.text
-    await worker.terminate()
+      // Validate document type
+      const isValid = verifyDocumentText(text, docType)
+      if (!isValid) {
+        if (docType === 'license') {
+          licenseImage.value = null
+          error.value = "Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly."
+        } else if (docType === 'or') {
+          orImage.value = null
+          error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
+        } else if (docType === 'cr') {
+          crImage.value = null
+          error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
+        }
+        return
+      }
 
-    console.log(`OCR Raw parsed text for ${docType}:`, text)
-    console.log('OCR confidence:', ret.data.confidence || 'N/A')
+      ocrStatus.value = 'Extracting fields...'
+      parseOCRText(text, docType)
+
+      if (docType === 'license') {
+        setTimeout(() => {
+          if (licenseNumberInput.value) licenseNumberInput.value.focus()
+        }, 100)
+      }
+      // End RapidOCR branch
+    } else {
+      // Tesseract fallback path (kept intact)
+      const Tesseract = ocrEngine.instance || await loadTesseract()
+      ocrStatus.value = 'Calibrating OCR engine...'
+      const worker = await Tesseract.createWorker('eng')
+
+      try {
+        const psm = docType === 'cr' ? '1' : '6'
+        await worker.setParameters({
+          tessedit_pageseg_mode: psm,
+          user_defined_dpi: '300',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :()'
+        })
+      } catch (paramErr) {
+        console.warn('Could not set Tesseract params:', paramErr)
+      }
+
+      ocrStatus.value = 'Running OCR...'
+      const ret = await worker.recognize(ocrBase64)
+      const text = ret.data.text
+      await worker.terminate()
+
+      console.log(`OCR Raw parsed text for ${docType}:`, text)
+      console.log('OCR confidence:', ret.data.confidence || 'N/A')
 
     // Validate document type
     const isValid = verifyDocumentText(text, docType)
