@@ -383,41 +383,6 @@ const loadTesseract = () => {
   })
 }
 
-// RapidOCR loader — used only for Certificate of Registration (CR) processing.
-// This keeps RapidOCR isolated to CR handling so it doesn't affect license/OR parsing.
-const loadRapidOCR = async () => {
-  if (window.RapidOCR && typeof window.RapidOCR.recognize === 'function') {
-    return window.RapidOCR
-  }
-
-  const rapidUrlCandidates = [
-    // Try local vendor first (useful on Render or when you drop the file into public/vendor)
-    '/vendor/rapidocr.js',
-    '/rapidocr.js',
-    'https://unpkg.com/rapidocr@latest/dist/rapidocr.js',
-    'https://cdn.jsdelivr.net/npm/rapidocr@latest/dist/rapidocr.js'
-  ]
-
-  for (const url of rapidUrlCandidates) {
-    try {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script')
-        s.src = url
-        s.onload = () => resolve(null)
-        s.onerror = () => reject(new Error('RapidOCR script failed'))
-        document.head.appendChild(s)
-        setTimeout(() => resolve(null), 1200)
-      })
-      if (window.RapidOCR && typeof window.RapidOCR.recognize === 'function') {
-        return window.RapidOCR
-      }
-    } catch (e) {
-      console.warn('RapidOCR load attempt failed for', url, e)
-    }
-  }
-  throw new Error('RapidOCR not available')
-}
-
 async function openCameraModal(docType) {
   activeCaptureType.value = docType
   showCameraModal.value = true
@@ -1006,49 +971,35 @@ async function runOCR(fileBase64, docType) {
       return
     }
 
-    // For CR documents, use RapidOCR exclusively for testing. If RapidOCR fails, return an error (no Tesseract fallback).
-    // Try RapidOCR first, but fall back to Tesseract for CR if RapidOCR fails.
-    // For development: use RapidOCR exclusively for CR and surface any RapidOCR error
+    const Tesseract = await loadTesseract()
+    ocrStatus.value = 'Calibrating OCR engine...'
+    const worker = await Tesseract.createWorker('eng')
     try {
-      const rapidEngine = await loadRapidOCR()
-      ocrStatus.value = 'Running RapidOCR (CR)...'
-      let rawResult = null
-      try {
-        rawResult = await rapidEngine.recognize(ocrBase64, { lang: 'eng', psm: '1' })
-      } catch (e) {
-        try { rawResult = await rapidEngine.recognize(ocrBase64) } catch (e2) { rawResult = null; console.warn('RapidOCR recognize error fallback:', e, e2); throw e2 || e }
-      }
+      await worker.setParameters({
+        tessedit_pageseg_mode: '1',
+        user_defined_dpi: '300',
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/., :()'
+      })
+    } catch (paramErr) {
+      console.warn('Could not set Tesseract params for CR:', paramErr)
+    }
+    ocrStatus.value = 'Running OCR...'
+    const ret = await worker.recognize(ocrBase64)
+    const text = ret.data.text
+    await worker.terminate()
 
-      const text = (rawResult && (rawResult.text || rawResult.data || rawResult)) || ''
-      console.log('RapidOCR Raw parsed text for CR:', text)
+    console.log('Tesseract Raw parsed text for CR:', text)
 
-      if (!text) {
-        crImage.value = null
-        const msg = 'RapidOCR returned empty text for CR.'
-        console.warn(msg)
-        error.value = `RapidOCR error: ${msg}`
-        return
-      }
-
-      const isValid = verifyDocumentText(text, 'cr')
-      if (!isValid) {
-        crImage.value = null
-        const msg = 'RapidOCR returned text but did not validate as CR.'
-        console.warn(msg, text)
-        error.value = `RapidOCR error: ${msg} RawText="${text.slice(0,200)}"`
-        return
-      }
-
-      ocrStatus.value = 'Extracting fields...'
-      parseOCRText(text, 'cr')
-      return
-    } catch (e) {
-      console.warn('RapidOCR failed for CR:', e)
+    const isValid = verifyDocumentText(text, 'cr')
+    if (!isValid) {
       crImage.value = null
-      // Surface the raw error to the UI so you can copy it for debugging
-      error.value = `RapidOCR error: ${e && e.message ? e.message : String(e)}`
+      error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
       return
     }
+
+    ocrStatus.value = 'Extracting fields...'
+    parseOCRText(text, 'cr')
+    return
   } catch (err) {
     console.warn('OCR failed, falling back to simulated parser:', err)
     ocrStatus.value = 'Extracting fields (Fallback)...'
