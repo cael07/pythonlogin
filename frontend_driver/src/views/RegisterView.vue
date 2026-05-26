@@ -920,78 +920,14 @@ function detectDocumentBounds(imageData) {
 
 async function runOCR(fileBase64, docType) {
   ocrLoading.value = true
-  ocrStatus.value = 'Preparing image for OCR...'
+  ocrStatus.value = 'Scanning file, please wait...'
   error.value = ''
 
   try {
-    ocrStatus.value = 'Preprocessing image...'
     const ocrBase64 = docType === 'cr' ? await preprocessDocumentImage(fileBase64) : fileBase64
 
-    // For CR documents use RapidOCR backend directly
-    if (docType === 'cr') {
-      const host = window.location.hostname
-      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
-      let ocrUrl
-
-      if (host === 'localhost' || host === '127.0.0.1') {
-        ocrUrl = `${protocol}//${host}:9000/api/ocr/rapidocr`
-      } else if (host === 'pythonlogin-driver.onrender.com') {
-        ocrUrl = 'https://pythonlogin-api.onrender.com/api/ocr/rapidocr'
-      } else {
-        ocrUrl = `${protocol}//${host}/api/ocr/rapidocr`
-      }
-
-      ocrStatus.value = 'Uploading to RapidOCR…'
-      let rawResponse = null
-      try {
-        const response = await fetch(ocrUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dataUrl: ocrBase64 })
-        })
-        const json = await response.json()
-        if (!response.ok || !json.ok) {
-          throw new Error(json.error || `HTTP ${response.status}`)
-        }
-        rawResponse = json
-      } catch (e) {
-        crImage.value = null
-        const msg = `RapidOCR backend failed: ${e && e.message ? e.message : String(e)}`
-        console.warn(msg)
-        error.value = msg
-        return
-      }
-
-      // Convert words array to plain text
-      const words = rawResponse.words || []
-      const text = words.map((w) => w.text || '').join(' ')
-      console.log('RapidOCR Raw parsed text for CR:', text)
-
-      if (!text || words.length === 0) {
-        crImage.value = null
-        const msg = 'RapidOCR returned no text for CR.'
-        console.warn(msg)
-        error.value = `RapidOCR error: ${msg}`
-        return
-      }
-
-      const isValid = verifyDocumentText(text, 'cr')
-      if (!isValid) {
-        crImage.value = null
-        const msg = 'RapidOCR returned text but did not validate as CR.'
-        console.warn(msg, text)
-        error.value = `RapidOCR error: ${msg} RawText="${text.slice(0,200)}"`
-        return
-      }
-
-      ocrStatus.value = 'Extracting fields...'
-      parseOCRText(text, 'cr')
-      return
-    }
-
-    // All documents except CR continue to use Tesseract
+    // All documents use Tesseract only; RapidOCR has been removed.
     const Tesseract = await loadTesseract()
-    ocrStatus.value = 'Calibrating OCR engine...'
     const worker = await Tesseract.createWorker('eng')
     try {
       const psm = docType === 'cr' ? '1' : '6'
@@ -1003,8 +939,7 @@ async function runOCR(fileBase64, docType) {
     } catch (paramErr) {
       console.warn('Could not set Tesseract params:', paramErr)
     }
-
-    ocrStatus.value = 'Running OCR...'
+    // Keep the scanning status visible while OCR is in progress
     const ret = await worker.recognize(ocrBase64)
     const text = ret.data.text
     await worker.terminate()
@@ -1016,13 +951,13 @@ async function runOCR(fileBase64, docType) {
     if (!isValid) {
       if (docType === 'license') {
         licenseImage.value = null
-        error.value = "Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly."
+        error.value = 'Error, Incorrect Document or Blurry, failed to read properly, please check and capture it clearly.'
       } else if (docType === 'or') {
         orImage.value = null
-        error.value = "Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR)."
+        error.value = 'Incorrect document. The uploaded image does not appear to be an LTO Official Receipt (OR).'
       } else if (docType === 'cr') {
         crImage.value = null
-        error.value = "Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR)."
+        error.value = 'Incorrect document. The uploaded image does not appear to be an LTO Certificate of Registration (CR).'
       }
       return
     }
@@ -1035,12 +970,15 @@ async function runOCR(fileBase64, docType) {
     return
   } catch (err) {
     console.warn('OCR failed:', err)
-    // When testing RapidOCR-only CR flow we intentionally surface rapidocr errors above.
-    ocrStatus.value = 'Extracting fields (Fallback)...'
-    setTimeout(() => {
-      generateRealisticFallback(docType)
-      if (docType === 'license') setTimeout(() => { if (licenseNumberInput.value) licenseNumberInput.value.focus() }, 100)
-    }, 1000)
+    if (docType === 'license') {
+      licenseImage.value = null
+    } else if (docType === 'or') {
+      orImage.value = null
+    } else if (docType === 'cr') {
+      crImage.value = null
+    }
+    error.value = `OCR failed: ${err && err.message ? err.message : String(err)}`
+    return
   } finally {
     ocrLoading.value = false
     ocrStatus.value = ''
@@ -1385,10 +1323,10 @@ function generateRealisticFallback(docType) {
 
 function fillDemoData(docType) {
   ocrLoading.value = true
-  ocrStatus.value = 'Scanning layout and text...'
+  ocrStatus.value = 'Scanning file, please wait...'
   
   setTimeout(() => {
-    ocrStatus.value = 'Generating document data...'
+    ocrStatus.value = 'Scanning file, please wait...'
     setTimeout(() => {
       if (docType === 'license') {
         licenseImage.value = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='

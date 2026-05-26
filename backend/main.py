@@ -95,9 +95,8 @@ app.include_router(auth_router)
 app.include_router(ride_router)
 
 
-# ── OCR document readers (EasyOCR + RapidOCR) ──────────────────────────────
+# ── OCR document reader (EasyOCR) ──────────────────────────────
 _EASYOCR_READER = None
-_RAPIDOCR_READER = None
 
 
 def _get_easyocr_reader():
@@ -108,21 +107,8 @@ def _get_easyocr_reader():
     return _EASYOCR_READER
 
 
-def _get_rapidocr_reader():
-    global _RAPIDOCR_READER
-    if _RAPIDOCR_READER is None:
-        from rapidocr_onnxruntime import RapidOCR
-        _RAPIDOCR_READER = RapidOCR()
-    return _RAPIDOCR_READER
-
-
 def _run_easyocr(arr):
     return [(box, text, conf) for box, text, conf in _get_easyocr_reader().readtext(arr)]
-
-
-def _run_rapidocr(arr):
-    result, _elapse = _get_rapidocr_reader()(arr)
-    return [(it[0], it[1], it[2]) for it in (result or [])]
 
 
 class OcrRequest(BaseModel):
@@ -132,7 +118,7 @@ class OcrRequest(BaseModel):
 @app.post("/api/ocr/{engine}")
 def ocr_document(engine: str, payload: OcrRequest):
     engine = (engine or "").lower()
-    if engine not in ("easyocr", "rapidocr"):
+    if engine != "easyocr":
         return JSONResponse({"ok": False, "error": f"unknown OCR engine '{engine}'"}, status_code=400)
 
     data_url = payload.dataUrl or ""
@@ -150,9 +136,9 @@ def ocr_document(engine: str, payload: OcrRequest):
         from PIL import Image
         img = Image.open(io.BytesIO(raw)).convert("RGB")
         arr = np.array(img)
-        results = _run_rapidocr(arr) if engine == "rapidocr" else _run_easyocr(arr)
+        results = _run_easyocr(arr)
     except ModuleNotFoundError as e:
-        pkg = "rapidocr-onnxruntime" if engine == "rapidocr" else "easyocr"
+        pkg = "easyocr"
         return JSONResponse(
             {"ok": False, "error": f"{engine} not installed ({e}). Run: pip install {pkg}"},
             status_code=500)

@@ -103,7 +103,7 @@ const TURN_LO = 0.38      // head clearly turned to the other side
 const FRONT_MIN = 0.44    // facing forward band
 const FRONT_MAX = 0.56
 const FRONT_HOLD_MS = 600    // must hold "front" this long before countdown
-const COUNTDOWN_MS = 3000    // 3·2·1
+const COUNTDOWN_MS = 2000    // 2·1
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
 
@@ -203,6 +203,7 @@ async function detectionLoop() {
         } else {
             const elapsed = performance.now() - countStart
             if (elapsed >= COUNTDOWN_MS) {
+                faceCountdown.value = 0
                 const canvas = document.createElement("canvas")
                 const dataUrl = captureFrame(video, canvas)
                 hint.value = "Captured ✓"
@@ -212,7 +213,7 @@ async function detectionLoop() {
                 emit('captured', dataUrl)
                 return
             }
-            const remaining = Math.ceil((COUNTDOWN_MS - elapsed) / 1000)
+            const remaining = Math.max(1, Math.ceil((COUNTDOWN_MS - elapsed) / 1000))
             if (remaining !== countdownLastShown) {
                 countdownLastShown = remaining
                 faceCountdown.value = remaining
@@ -238,8 +239,9 @@ async function detectionLoop() {
                     counting = true
                     countStart = performance.now()
                     countdownLastShown = -1
+                    faceCountdown.value = 2
                     isScanSuccess.value = true
-                    hint.value = "Hold still… capturing in 3"
+                    hint.value = "Hold still… capturing in 2"
                 }
             } else {
                 stepsCompleted.push(step.key)

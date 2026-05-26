@@ -13,5 +13,4 @@ websockets
 httpx
 numpy
 easyocr
-rapidocr-onnxruntime
 
