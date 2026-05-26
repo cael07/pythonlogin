@@ -927,6 +927,64 @@ async function runOCR(fileBase64, docType) {
     ocrStatus.value = 'Preprocessing image...'
     const ocrBase64 = docType === 'cr' ? await preprocessDocumentImage(fileBase64) : fileBase64
 
+    // For CR documents use RapidOCR via the shared DocumentOCR module (from aiaai/document).
+    // This path is RapidOCR-only as requested for testing; no Tesseract fallback.
+    if (docType === 'cr') {
+      if (!window.DocumentOCR || !window.DocumentOCR.read) {
+        crImage.value = null
+        const msg = 'RapidOCR not available (window.DocumentOCR not loaded).'
+        console.warn(msg)
+        error.value = msg
+        return
+      }
+
+      // Convert dataURL to File so DocumentOCR.read can accept it.
+      function dataURLtoBlob(dataurl) {
+        const arr = dataurl.split(',')
+        const mimeMatch = arr[0].match(/:(.*?);/)
+        const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg'
+        const bstr = atob(arr[1])
+        let n = bstr.length
+        const u8 = new Uint8Array(n)
+        while (n--) u8[n] = bstr.charCodeAt(n)
+        return new Blob([u8], { type: mime })
+      }
+
+      const blob = dataURLtoBlob(ocrBase64)
+      const file = new File([blob], 'cr.jpg', { type: blob.type || 'image/jpeg' })
+
+      ocrStatus.value = 'Uploading to RapidOCR…'
+      const out = await window.DocumentOCR.read(file, {
+        engine: 'rapidocr',
+        onProgress: (p, msg) => { if (msg) ocrStatus.value = msg }
+      })
+
+      const text = out && out.text ? out.text : ''
+      console.log('RapidOCR Raw parsed text for CR:', text)
+
+      if (!text) {
+        crImage.value = null
+        const msg = 'RapidOCR returned empty text for CR.'
+        console.warn(msg)
+        error.value = `RapidOCR error: ${msg}`
+        return
+      }
+
+      const isValid = verifyDocumentText(text, 'cr')
+      if (!isValid) {
+        crImage.value = null
+        const msg = 'RapidOCR returned text but did not validate as CR.'
+        console.warn(msg, text)
+        error.value = `RapidOCR error: ${msg} RawText="${text.slice(0,200)}"`
+        return
+      }
+
+      ocrStatus.value = 'Extracting fields...'
+      parseOCRText(text, 'cr')
+      return
+    }
+
+    // Non-CR documents continue to use Tesseract
     const Tesseract = await loadTesseract()
     ocrStatus.value = 'Calibrating OCR engine...'
     const worker = await Tesseract.createWorker('eng')
@@ -971,7 +1029,8 @@ async function runOCR(fileBase64, docType) {
     }
     return
   } catch (err) {
-    console.warn('OCR failed, falling back to simulated parser:', err)
+    console.warn('OCR failed:', err)
+    // When testing RapidOCR-only CR flow we intentionally surface rapidocr errors above.
     ocrStatus.value = 'Extracting fields (Fallback)...'
     setTimeout(() => {
       generateRealisticFallback(docType)
