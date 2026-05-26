@@ -927,39 +927,21 @@ async function runOCR(fileBase64, docType) {
     ocrStatus.value = 'Preprocessing image...'
     const ocrBase64 = docType === 'cr' ? await preprocessDocumentImage(fileBase64) : fileBase64
 
-    // For CR documents use RapidOCR via the backend endpoint (from aiaai implementation).
-    // This path is RapidOCR-only for testing; no Tesseract fallback for CR.
+    // For CR documents use RapidOCR backend directly
     if (docType === 'cr') {
-      if (!window.DocumentOCR || !window.DocumentOCR.read) {
-        crImage.value = null
-        const msg = 'RapidOCR backend not available (window.DocumentOCR not loaded).'
-        console.warn(msg)
-        error.value = msg
-        return
-      }
-
-      // Convert dataURL to File so DocumentOCR.read can accept it.
-      function dataURLtoBlob(dataurl) {
-        const arr = dataurl.split(',')
-        const mimeMatch = arr[0].match(/:(.*?);/)
-        const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg'
-        const bstr = atob(arr[1])
-        let n = bstr.length
-        const u8 = new Uint8Array(n)
-        while (n--) u8[n] = bstr.charCodeAt(n)
-        return new Blob([u8], { type: mime })
-      }
-
-      const blob = dataURLtoBlob(ocrBase64)
-      const file = new File([blob], 'cr.jpg', { type: blob.type || 'image/jpeg' })
-
       ocrStatus.value = 'Uploading to RapidOCR…'
-      let out = null
+      let rawResponse = null
       try {
-        out = await window.DocumentOCR.read(file, {
-          engine: 'rapidocr',
-          onProgress: (p, msg) => { if (msg) ocrStatus.value = msg }
+        const response = await fetch('http://127.0.0.1:9000/api/ocr/rapidocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl: ocrBase64 })
         })
+        const json = await response.json()
+        if (!response.ok || !json.ok) {
+          throw new Error(json.error || `HTTP ${response.status}`)
+        }
+        rawResponse = json
       } catch (e) {
         crImage.value = null
         const msg = `RapidOCR backend failed: ${e && e.message ? e.message : String(e)}`
@@ -968,12 +950,14 @@ async function runOCR(fileBase64, docType) {
         return
       }
 
-      const text = out && out.text ? out.text : ''
+      // Convert words array to plain text
+      const words = rawResponse.words || []
+      const text = words.map((w) => w.text || '').join(' ')
       console.log('RapidOCR Raw parsed text for CR:', text)
 
-      if (!text) {
+      if (!text || words.length === 0) {
         crImage.value = null
-        const msg = 'RapidOCR returned empty text for CR.'
+        const msg = 'RapidOCR returned no text for CR.'
         console.warn(msg)
         error.value = `RapidOCR error: ${msg}`
         return
