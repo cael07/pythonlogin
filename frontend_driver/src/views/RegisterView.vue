@@ -927,12 +927,12 @@ async function runOCR(fileBase64, docType) {
     ocrStatus.value = 'Preprocessing image...'
     const ocrBase64 = docType === 'cr' ? await preprocessDocumentImage(fileBase64) : fileBase64
 
-    // For CR documents use RapidOCR via the shared DocumentOCR module (from aiaai/document).
-    // This path is RapidOCR-only as requested for testing; no Tesseract fallback.
+    // For CR documents use RapidOCR via the backend endpoint (from aiaai implementation).
+    // This path is RapidOCR-only for testing; no Tesseract fallback for CR.
     if (docType === 'cr') {
       if (!window.DocumentOCR || !window.DocumentOCR.read) {
         crImage.value = null
-        const msg = 'RapidOCR not available (window.DocumentOCR not loaded).'
+        const msg = 'RapidOCR backend not available (window.DocumentOCR not loaded).'
         console.warn(msg)
         error.value = msg
         return
@@ -954,10 +954,19 @@ async function runOCR(fileBase64, docType) {
       const file = new File([blob], 'cr.jpg', { type: blob.type || 'image/jpeg' })
 
       ocrStatus.value = 'Uploading to RapidOCR…'
-      const out = await window.DocumentOCR.read(file, {
-        engine: 'rapidocr',
-        onProgress: (p, msg) => { if (msg) ocrStatus.value = msg }
-      })
+      let out = null
+      try {
+        out = await window.DocumentOCR.read(file, {
+          engine: 'rapidocr',
+          onProgress: (p, msg) => { if (msg) ocrStatus.value = msg }
+        })
+      } catch (e) {
+        crImage.value = null
+        const msg = `RapidOCR backend failed: ${e && e.message ? e.message : String(e)}`
+        console.warn(msg)
+        error.value = msg
+        return
+      }
 
       const text = out && out.text ? out.text : ''
       console.log('RapidOCR Raw parsed text for CR:', text)
@@ -984,7 +993,7 @@ async function runOCR(fileBase64, docType) {
       return
     }
 
-    // Non-CR documents continue to use Tesseract
+    // All documents except CR continue to use Tesseract
     const Tesseract = await loadTesseract()
     ocrStatus.value = 'Calibrating OCR engine...'
     const worker = await Tesseract.createWorker('eng')

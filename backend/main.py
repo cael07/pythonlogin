@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from pydantic import BaseModel
 import os
 
 from .database import init_db
@@ -93,8 +94,88 @@ app.include_router(auth_router)
 app.include_router(ride_router)
 
 
+# ── OCR document readers (EasyOCR + RapidOCR) ──────────────────────────────
+_EASYOCR_READER = None
+_RAPIDOCR_READER = None
 
-@app.get("/")
+
+def _get_easyocr_reader():
+    global _EASYOCR_READER
+    if _EASYOCR_READER is None:
+        import easyocr
+        _EASYOCR_READER = easyocr.Reader(["en"], gpu=False, verbose=False)
+    return _EASYOCR_READER
+
+
+def _get_rapidocr_reader():
+    global _RAPIDOCR_READER
+    if _RAPIDOCR_READER is None:
+        from rapidocr_onnxruntime import RapidOCR
+        _RAPIDOCR_READER = RapidOCR()
+    return _RAPIDOCR_READER
+
+
+def _run_easyocr(arr):
+    return [(box, text, conf) for box, text, conf in _get_easyocr_reader().readtext(arr)]
+
+
+def _run_rapidocr(arr):
+    result, _elapse = _get_rapidocr_reader()(arr)
+    return [(it[0], it[1], it[2]) for it in (result or [])]
+
+
+class OcrRequest(BaseModel):
+    dataUrl: str  # base64 image data URL
+
+
+@app.post("/api/ocr/{engine}")
+def ocr_document(engine: str, payload: OcrRequest):
+    engine = (engine or "").lower()
+    if engine not in ("easyocr", "rapidocr"):
+        return JSONResponse({"ok": False, "error": f"unknown OCR engine '{engine}'"}, status_code=400)
+
+    data_url = payload.dataUrl or ""
+    if "base64," not in data_url:
+        return JSONResponse({"ok": False, "error": "expected a base64 image data URL"}, status_code=400)
+    import base64 as _b64
+    try:
+        raw = _b64.b64decode(data_url.split("base64,", 1)[1])
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"bad base64: {e}"}, status_code=400)
+
+    try:
+        import io
+        import numpy as np
+        from PIL import Image
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+        arr = np.array(img)
+        results = _run_rapidocr(arr) if engine == "rapidocr" else _run_easyocr(arr)
+    except ModuleNotFoundError as e:
+        pkg = "rapidocr-onnxruntime" if engine == "rapidocr" else "easyocr"
+        return JSONResponse(
+            {"ok": False, "error": f"{engine} not installed ({e}). Run: pip install {pkg}"},
+            status_code=500)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"OCR failed: {e}"}, status_code=500)
+
+    words = []
+    for box, text, conf in results:
+        t = (text or "").strip()
+        if not t:
+            continue
+        xs = [float(p[0]) for p in box]
+        ys = [float(p[1]) for p in box]
+        words.append({
+            "text": t,
+            "x0": min(xs), "x1": max(xs), "y0": min(ys), "y1": max(ys),
+            "conf": float(conf),
+        })
+
+    return {"ok": True, "engine": engine, "words": words,
+            "width": img.width, "height": img.height, "count": len(words)}
+
+
+
 async def root():
     return {
         "service": "PythonLogin Auth API",

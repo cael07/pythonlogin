@@ -11,5 +11,7 @@ python-dotenv
 Pillow
 websockets
 httpx
-# Note: heavy OCR deps removed for Render compatibility. Use Tesseract.js (frontend) instead.
+numpy
+easyocr
+rapidocr-onnxruntime
 
