@@ -929,10 +929,22 @@ async function runOCR(fileBase64, docType) {
 
     // For CR documents use RapidOCR backend directly
     if (docType === 'cr') {
+      const host = window.location.hostname
+      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
+      let ocrUrl
+
+      if (host === 'localhost' || host === '127.0.0.1') {
+        ocrUrl = `${protocol}//${host}:9000/api/ocr/rapidocr`
+      } else if (host === 'pythonlogin-driver.onrender.com') {
+        ocrUrl = 'https://pythonlogin-api.onrender.com/api/ocr/rapidocr'
+      } else {
+        ocrUrl = `${protocol}//${host}/api/ocr/rapidocr`
+      }
+
       ocrStatus.value = 'Uploading to RapidOCR…'
       let rawResponse = null
       try {
-        const response = await fetch('http://127.0.0.1:9000/api/ocr/rapidocr', {
+        const response = await fetch(ocrUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dataUrl: ocrBase64 })
