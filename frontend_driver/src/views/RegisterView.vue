@@ -58,7 +58,7 @@
         <!-- Step 2: Driver's License Upload + OCR -->
         <div v-if="step === 2" class="doc-upload-container">
           <h3 class="step-title-inner">Upload Driver's License</h3>
-          <p class="step-desc-inner">Scan or upload your official Philippine Driver's License.</p>
+          <p class="step-desc-inner">Capture or upload your official Philippine Driver's License.</p>
           
           <div v-if="!licenseImage" class="mode-selector-tabs">
             <button :class="['tab-btn', activeMode === 'upload' ? 'active' : '']" @click="switchMode('upload')">📁 Upload File</button>
@@ -77,7 +77,7 @@
             <!-- Live Camera Capture -->
             <div v-else class="camera-placeholder-box" @click="openCameraModal('license')">
               <div class="camera-placeholder-icon">📸</div>
-              <p class="camera-placeholder-text">Launch Fullscreen Scanner</p>
+              <p class="camera-placeholder-text">Launch Fullscreen Capture</p>
               <span class="camera-placeholder-subtext">Tap to open viewfinder & capture license</span>
             </div>
           </div>
@@ -90,7 +90,7 @@
             </div>
             
             <div class="ocr-results glass">
-              <h4 class="ocr-results-title">Extracted Details (OCR)</h4>
+              <h4 class="ocr-results-title">Extracted Details</h4>
               
               <div class="form-group">
                 <label class="form-label">License Number</label>
@@ -123,7 +123,7 @@
             <button class="btn-back-arrow" @click="goToStep(2)">←</button>
             <h3 class="step-title-inner">Upload Original Receipt (OR)</h3>
           </div>
-          <p class="step-desc-inner">Scan or upload your vehicle's LTO Original Receipt to verify renewal date.</p>
+          <p class="step-desc-inner">Capture or upload your vehicle's LTO Original Receipt to verify renewal date.</p>
           
           <div v-if="!orImage" class="mode-selector-tabs">
             <button :class="['tab-btn', activeMode === 'upload' ? 'active' : '']" @click="switchMode('upload')">📁 Upload File</button>
@@ -142,7 +142,7 @@
             <!-- Live Camera Capture -->
             <div v-else class="camera-placeholder-box" @click="openCameraModal('or')">
               <div class="camera-placeholder-icon">📸</div>
-              <p class="camera-placeholder-text">Launch Fullscreen Scanner</p>
+              <p class="camera-placeholder-text">Launch Fullscreen Capture</p>
               <span class="camera-placeholder-subtext">Tap to open viewfinder & capture receipt</span>
             </div>
           </div>
@@ -155,7 +155,7 @@
             </div>
             
             <div class="ocr-results glass">
-              <h4 class="ocr-results-title">Extracted Details (OCR)</h4>
+              <h4 class="ocr-results-title">Extracted Details</h4>
               
               <div class="form-group">
                 <label class="form-label">OR Renewal Date</label>
@@ -180,7 +180,7 @@
             <button class="btn-back-arrow" @click="goToStep(3)">←</button>
             <h3 class="step-title-inner">Upload Certificate of Registration (CR)</h3>
           </div>
-          <p class="step-desc-inner">Scan or upload your LTO Certificate of Registration to verify vehicle ownership.</p>
+          <p class="step-desc-inner">Capture or upload your LTO Certificate of Registration to verify vehicle ownership.</p>
           
           <div v-if="!crImage" class="mode-selector-tabs">
             <button :class="['tab-btn', activeMode === 'upload' ? 'active' : '']" @click="switchMode('upload')">📁 Upload File</button>
@@ -199,7 +199,7 @@
             <!-- Live Camera Capture -->
             <div v-else class="camera-placeholder-box" @click="openCameraModal('cr')">
               <div class="camera-placeholder-icon">📸</div>
-              <p class="camera-placeholder-text">Launch Fullscreen Scanner</p>
+              <p class="camera-placeholder-text">Launch Fullscreen Capture</p>
               <span class="camera-placeholder-subtext">Tap to open viewfinder & capture ownership details</span>
             </div>
           </div>
@@ -212,7 +212,7 @@
             </div>
             
             <div class="ocr-results glass">
-              <h4 class="ocr-results-title">Extracted Details (OCR)</h4>
+              <h4 class="ocr-results-title">Extracted Details</h4>
               
               <div class="form-row-2">
                 <div class="form-group">
@@ -295,21 +295,23 @@
         <div class="camera-modal-viewfinder">
           <video ref="modalVideoEl" class="modal-video" autoplay muted playsinline></video>
 
-          <!-- Guideline rect — turns green when document detected -->
-          <div class="camera-modal-guideline">
-            <div class="camera-modal-guideline-rect" :class="{ aligned: docAligned }">
-              <span class="guideline-text">
-                {{ docAligned ? '✓ DOCUMENT DETECTED' : 'ALIGN DOCUMENT EDGES' }}
-              </span>
+          <!-- Guideline rect & hint: hide for OR/CR to allow full-screen capture of large documents -->
+          <template v-if="!(['or','cr'].includes(activeCaptureType))">
+            <div class="camera-modal-guideline">
+              <div class="camera-modal-guideline-rect" :class="{ aligned: docAligned }">
+                <span class="guideline-text">
+                  {{ docAligned ? '✓ DOCUMENT DETECTED' : 'ALIGN DOCUMENT EDGES' }}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <!-- Hint bar inside viewfinder -->
-          <div class="doc-hint-bar" :class="{ aligned: docAligned }">
-            <span v-if="docCountdown > 0">📸 Hold still…</span>
-            <span v-else-if="docAligned">✅ Document detected — hold steady</span>
-            <span v-else>📄 Fit the document inside the frame</span>
-          </div>
+            <!-- Hint bar inside viewfinder -->
+            <div class="doc-hint-bar" :class="{ aligned: docAligned }">
+              <span v-if="docCountdown > 0">📸 Hold still…</span>
+              <span v-else-if="docAligned">✅ Document detected — hold steady</span>
+              <span v-else>📄 Fit the document inside the frame</span>
+            </div>
+          </template>
         </div>
 
         <!-- Footer Controls -->
@@ -494,19 +496,38 @@ function startDocDetectionLoop() {
     const innerAvg = innerSum / innerCount
     const outerAvg = outerSum / outerCount
 
-    // Document is detected when the inner area is bright (white paper/ID card)
-    // and significantly brighter than the outer borders (contrast difference of >20 units)
-    const detected = innerAvg > 120 && (innerAvg - outerAvg) > 20
-
-    if (detected) {
-      steadyFrames++
+    // For large document types (OR/CR) prefer a full-frame bright-paper check
+    const docType = activeCaptureType.value
+    let detected = false
+    if (docType === 'or' || docType === 'cr') {
+      // consider the document detected if a large proportion of the frame is bright
+      let brightCount = 0
+      const total = 64 * 40
+      for (let i = 0; i < pixels.length; i += 4) {
+        const brightness = (pixels[i] * 0.299 + pixels[i+1] * 0.587 + pixels[i+2] * 0.114)
+        if (brightness > 120) brightCount++
+      }
+      detected = (brightCount / total) >= 0.6
+      if (detected) {
+        steadyFrames++
+      } else {
+        steadyFrames = 0
+        docAligned.value = false
+      }
+      if (steadyFrames >= STEADY_NEEDED) docAligned.value = true
     } else {
-      steadyFrames = 0
-      docAligned.value = false
-    }
-
-    if (steadyFrames >= STEADY_NEEDED) {
-      docAligned.value = true
+      // Document is detected when the inner area is bright (white paper/ID card)
+      // and significantly brighter than the outer borders (contrast difference of >20 units)
+      detected = innerAvg > 120 && (innerAvg - outerAvg) > 20
+      if (detected) {
+        steadyFrames++
+      } else {
+        steadyFrames = 0
+        docAligned.value = false
+      }
+      if (steadyFrames >= STEADY_NEEDED) {
+        docAligned.value = true
+      }
     }
 
     docDetectionRaf = requestAnimationFrame(detect)
