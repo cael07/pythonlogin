@@ -112,7 +112,7 @@
 
             <div class="btn-row">
               <button class="btn btn-ghost btn-retake" @click="licenseImage = null">↶ Retake</button>
-              <button class="btn btn-success" :disabled="!licenseNumber || !licenseName || isLicenseExpired" @click="goToStep(3)">Next Step ➔</button>
+              <button class="btn btn-success" :disabled="!licenseNumber || !licenseName || isLicenseExpired" @click="confirmDocStep(3)">{{ retakeTarget === 2 ? '✓ Confirm & Return' : 'Next Step ➔' }}</button>
             </div>
           </div>
         </div>
@@ -169,7 +169,7 @@
 
             <div class="btn-row">
               <button class="btn btn-ghost btn-retake" @click="orImage = null">↶ Retake</button>
-              <button class="btn btn-success" :disabled="!orRenewalDate || isOrExpired" @click="goToStep(4)">Next Step ➔</button>
+              <button class="btn btn-success" :disabled="!orRenewalDate || isOrExpired" @click="confirmDocStep(4)">{{ retakeTarget === 3 ? '✓ Confirm & Return' : 'Next Step ➔' }}</button>
             </div>
           </div>
         </div>
@@ -242,7 +242,7 @@
 
             <div class="btn-row">
               <button class="btn btn-ghost btn-retake" @click="crImage = null">↶ Retake</button>
-              <button class="btn btn-success" :disabled="!crPlate || !crBrand || !crOwnerName" @click="goToStep(5)">Next Step ➔</button>
+              <button class="btn btn-success" :disabled="!crPlate || !crBrand || !crOwnerName" @click="confirmDocStep(5)">{{ retakeTarget === 4 ? '✓ Confirm & Return' : 'Next Step ➔' }}</button>
             </div>
           </div>
         </div>
@@ -253,12 +253,20 @@
             v-if="step === 5"
             :face-image="faceImage"
             :license-number="licenseNumber"
+            :license-name="licenseName"
+            :license-expiry="licenseExpiry"
             :or-renewal-date="orRenewalDate"
             :plate-number="crPlate"
+            :cr-brand="crBrand"
+            :cr-color="crColor"
+            :cr-year="crYear"
             :loading="loading"
             :initial-full-name="licenseName || crOwnerName"
             @submit="handleRegister"
-            @retake="retake"
+            @retake-face="retakeFace"
+            @retake-license="retakeDoc(2)"
+            @retake-or="retakeDoc(3)"
+            @retake-cr="retakeDoc(4)"
           />
         </Transition>
       </div>
@@ -576,6 +584,20 @@ function goToStep(nextStep) {
   step.value = nextStep
 }
 
+/**
+ * Called when user clicks "Next Step" after completing a doc step.
+ * If we came here from a retake (retakeTarget is set and matches this step),
+ * go straight back to step 5 instead of the normal forward step.
+ */
+function confirmDocStep(normalNext) {
+  if (retakeTarget.value && retakeTarget.value === step.value) {
+    retakeTarget.value = null
+    goToStep(5)
+  } else {
+    goToStep(normalNext)
+  }
+}
+
 const isLicenseExpired = computed(() => {
   return isDateBeforeToday(licenseExpiry.value)
 })
@@ -667,18 +689,50 @@ onUnmounted(() => {
   stopDocCamera()
 })
 
+// Track whether we're retaking face-only (return to step 5) or doc (return to step 5 after doc step)
+const retakeTarget = ref(null) // null | 'face' | 2 | 3 | 4
+
 function onFaceCaptured(base64) {
   faceImage.value = base64
-  goToStep(2)
+  if (retakeTarget.value === 'face') {
+    // Face-only retake: go directly back to step 5
+    retakeTarget.value = null
+    goToStep(5)
+  } else {
+    goToStep(2)
+  }
 }
 
-function retake() {
+/** Retake face photo only — stays in step 5 after re-capture */
+function retakeFace() {
   faceImage.value = null
-  licenseImage.value = null
-  orImage.value = null
-  crImage.value = null
-  goToStep(1)
+  retakeTarget.value = 'face'
   error.value = ''
+  goToStep(1)
+}
+
+/** Retake a specific document — goes to that step, then returns to step 5 after new capture */
+function retakeDoc(docStep) {
+  retakeTarget.value = docStep
+  if (docStep === 2) {
+    licenseImage.value = null
+    licenseNumber.value = ''
+    licenseName.value = ''
+    licenseExpiry.value = ''
+  } else if (docStep === 3) {
+    orImage.value = null
+    orRenewalDate.value = ''
+  } else if (docStep === 4) {
+    crImage.value = null
+    crPlate.value = ''
+    crBrand.value = ''
+    crColor.value = ''
+    crModel.value = ''
+    crYear.value = ''
+    crOwnerName.value = ''
+  }
+  error.value = ''
+  goToStep(docStep)
 }
 
 function onFileChange(event, docType) {

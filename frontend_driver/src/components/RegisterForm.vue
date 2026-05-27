@@ -1,6 +1,6 @@
 <template>
   <div class="rf-root">
-    <!-- Face preview -->
+    <!-- ── Face preview ─────────────────────────── -->
     <div class="rf-face-row">
       <div class="rf-face-wrap">
         <img :src="faceImage" alt="Captured face" class="rf-face-img" />
@@ -10,16 +10,92 @@
       </div>
       <div class="rf-face-info">
         <p class="rf-face-title">Face captured ✓</p>
-        <p class="rf-face-sub">Your photo will be saved with your account for Face ID.</p>
-        <button class="btn btn-ghost rf-retake" type="button" @click="$emit('retake')">
+        <p class="rf-face-sub">Your photo will be used for Face ID login.</p>
+        <button class="btn btn-ghost rf-retake" type="button" @click="$emit('retake-face')">
           ↩ Retake photo
         </button>
       </div>
     </div>
 
-    <div class="divider">Document details</div>
+    <!-- ── Document Details ─────────────────────── -->
+    <div class="doc-sections">
 
-    <!-- Registration form -->
+      <!-- Driver's License -->
+      <div class="doc-section">
+        <div class="doc-section-header">
+          <span class="doc-section-icon">🪪</span>
+          <span class="doc-section-label">Driver's License</span>
+          <button class="btn-retake-doc" type="button" @click="$emit('retake-license')">
+            ↩ Retake
+          </button>
+        </div>
+        <div class="doc-info-grid">
+          <div class="doc-info-row">
+            <span class="doc-info-key">Full Name</span>
+            <span class="doc-info-val">{{ props.licenseName || '—' }}</span>
+          </div>
+          <div class="doc-info-row">
+            <span class="doc-info-key">License Number</span>
+            <span class="doc-info-val">{{ props.licenseNumber || '—' }}</span>
+          </div>
+          <div class="doc-info-row">
+            <span class="doc-info-key">Expiry Date</span>
+            <span class="doc-info-val">{{ props.licenseExpiry || '—' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- OR -->
+      <div class="doc-section">
+        <div class="doc-section-header">
+          <span class="doc-section-icon">🧾</span>
+          <span class="doc-section-label">Official Receipt (OR)</span>
+          <button class="btn-retake-doc" type="button" @click="$emit('retake-or')">
+            ↩ Retake
+          </button>
+        </div>
+        <div class="doc-info-grid">
+          <div class="doc-info-row">
+            <span class="doc-info-key">Renewal Date</span>
+            <span class="doc-info-val">{{ props.orRenewalDate || '—' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CR -->
+      <div class="doc-section">
+        <div class="doc-section-header">
+          <span class="doc-section-icon">🏍️</span>
+          <span class="doc-section-label">Certificate of Registration (CR)</span>
+          <button class="btn-retake-doc" type="button" @click="$emit('retake-cr')">
+            ↩ Retake
+          </button>
+        </div>
+        <div class="doc-info-grid">
+          <div class="doc-info-row">
+            <span class="doc-info-key">Plate Number</span>
+            <span class="doc-info-val">{{ props.plateNumber || '—' }}</span>
+          </div>
+          <div class="doc-info-row">
+            <span class="doc-info-key">Brand</span>
+            <span class="doc-info-val">{{ props.crBrand || '—' }}</span>
+          </div>
+          <div class="doc-info-row">
+            <span class="doc-info-key">Color</span>
+            <span class="doc-info-val">{{ props.crColor || '—' }}</span>
+          </div>
+          <div class="doc-info-row">
+            <span class="doc-info-key">Year</span>
+            <span class="doc-info-val">{{ props.crYear || '—' }}</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="divider">Account details</div>
+
+    <!-- ── Registration form ─────────────────────── -->
     <form @submit.prevent="handleSubmit" novalidate>
       <div class="form-group">
         <label class="form-label" for="rf-fullname">Full name</label>
@@ -35,45 +111,6 @@
         />
         <span v-if="touched.full_name && !form.full_name" class="field-err">Full name is required</span>
       </div>
-
-      <div class="form-row-2">
-        <div class="form-group">
-          <label class="form-label" for="rf-license-number">Driver's License No.</label>
-          <input
-            id="rf-license-number"
-            :value="props.licenseNumber"
-            type="text"
-            class="form-input"
-            readonly
-            placeholder="Driver's License No."
-          />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="rf-or-renewal-date">OR Renewal Date</label>
-          <input
-            id="rf-or-renewal-date"
-            :value="props.orRenewalDate"
-            type="text"
-            class="form-input"
-            readonly
-            placeholder="YYYY-MM-DD"
-          />
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="rf-plate-number">Plate Number</label>
-        <input
-          id="rf-plate-number"
-          :value="props.plateNumber"
-          type="text"
-          class="form-input"
-          readonly
-          placeholder="Plate Number"
-        />
-      </div>
-
-      <div class="divider">Account details</div>
 
       <div class="form-row">
         <div class="form-group">
@@ -176,14 +213,19 @@
 import { ref, computed } from 'vue'
 
 const props = defineProps({
-  faceImage:        { type: String, required: true },
-  licenseNumber:    { type: String, default: '' },
-  orRenewalDate:    { type: String, default: '' },
-  plateNumber:      { type: String, default: '' },
-  loading:          { type: Boolean, default: false },
-  initialFullName:  { type: String, default: '' },
+  faceImage:      { type: String, required: true },
+  licenseNumber:  { type: String, default: '' },
+  licenseName:    { type: String, default: '' },
+  licenseExpiry:  { type: String, default: '' },
+  orRenewalDate:  { type: String, default: '' },
+  plateNumber:    { type: String, default: '' },
+  crBrand:        { type: String, default: '' },
+  crColor:        { type: String, default: '' },
+  crYear:         { type: String, default: '' },
+  loading:        { type: Boolean, default: false },
+  initialFullName:{ type: String, default: '' },
 })
-const emit = defineEmits(['submit', 'retake'])
+const emit = defineEmits(['submit', 'retake-face', 'retake-license', 'retake-or', 'retake-cr'])
 
 const form = ref({
   full_name:        props.initialFullName || '',
@@ -193,8 +235,6 @@ const form = ref({
   confirm_password: '',
 })
 const confirmDetails = ref(false)
-
-
 const showPwd = ref(false)
 const touched = ref({})
 
@@ -256,7 +296,6 @@ const canSubmit = computed(() =>
 
 /* ── Submit ── */
 function handleSubmit() {
-  // Touch all fields to trigger validation display
   ['full_name','username','email','password','confirm_password'].forEach(touch)
   if (!confirmDetails.value) return
   if (!canSubmit.value) return
@@ -276,7 +315,7 @@ function handleSubmit() {
   border: 1px solid rgba(16,185,129,0.2);
   border-radius: var(--radius-md);
   padding: 1.1rem 1.25rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .rf-face-wrap {
@@ -314,6 +353,93 @@ function handleSubmit() {
   margin-top: 0.6rem;
   padding: 0.35rem 0.85rem;
   font-size: 0.78rem;
+}
+
+/* ── Document sections ── */
+.doc-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 0.5rem;
+}
+
+.doc-section {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.doc-section:hover {
+  border-color: rgba(99,102,241,0.3);
+}
+
+.doc-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border);
+}
+
+.doc-section-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.doc-section-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 1;
+  letter-spacing: 0.01em;
+}
+
+.btn-retake-doc {
+  background: none;
+  border: 1px solid rgba(99,102,241,0.35);
+  border-radius: 6px;
+  color: #818cf8;
+  font-size: 0.73rem;
+  font-weight: 500;
+  padding: 0.25rem 0.65rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-retake-doc:hover {
+  background: rgba(99,102,241,0.12);
+  border-color: #818cf8;
+  color: #a5b4fc;
+}
+
+.doc-info-grid {
+  padding: 0.5rem 1rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.doc-info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.doc-info-key {
+  color: var(--text-3);
+  min-width: 110px;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+}
+
+.doc-info-val {
+  color: var(--text-1);
+  font-weight: 500;
+  word-break: break-all;
 }
 
 /* ── Password strength ── */
