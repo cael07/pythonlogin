@@ -17,7 +17,7 @@
       </div>
     </div>
 
-    <div class="divider">Account details</div>
+    <div class="divider">Document details</div>
 
     <!-- Registration form -->
     <form @submit.prevent="handleSubmit" novalidate>
@@ -35,6 +35,45 @@
         />
         <span v-if="touched.full_name && !form.full_name" class="field-err">Full name is required</span>
       </div>
+
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label" for="rf-license-number">Driver's License No.</label>
+          <input
+            id="rf-license-number"
+            :value="props.licenseNumber"
+            type="text"
+            class="form-input"
+            readonly
+            placeholder="Driver's License No."
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="rf-or-renewal-date">OR Renewal Date</label>
+          <input
+            id="rf-or-renewal-date"
+            :value="props.orRenewalDate"
+            type="text"
+            class="form-input"
+            readonly
+            placeholder="YYYY-MM-DD"
+          />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="rf-plate-number">Plate Number</label>
+        <input
+          id="rf-plate-number"
+          :value="props.plateNumber"
+          type="text"
+          class="form-input"
+          readonly
+          placeholder="Plate Number"
+        />
+      </div>
+
+      <div class="divider">Account details</div>
 
       <div class="form-row">
         <div class="form-group">
@@ -109,6 +148,16 @@
         </div>
       </div>
 
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            v-model="confirmDetails"
+          />
+          <span>I confirm all these details are correct.</span>
+        </label>
+      </div>
+
       <button
         id="register-submit-btn"
         type="submit"
@@ -127,9 +176,12 @@
 import { ref, computed } from 'vue'
 
 const props = defineProps({
-  faceImage:       { type: String, required: true },
-  loading:         { type: Boolean, default: false },
-  initialFullName: { type: String, default: '' },
+  faceImage:        { type: String, required: true },
+  licenseNumber:    { type: String, default: '' },
+  orRenewalDate:    { type: String, default: '' },
+  plateNumber:      { type: String, default: '' },
+  loading:          { type: Boolean, default: false },
+  initialFullName:  { type: String, default: '' },
 })
 const emit = defineEmits(['submit', 'retake'])
 
@@ -140,6 +192,7 @@ const form = ref({
   password:         '',
   confirm_password: '',
 })
+const confirmDetails = ref(false)
 
 
 const showPwd = ref(false)
@@ -198,13 +251,14 @@ const strengthColor = computed(() => {
 })
 
 const canSubmit = computed(() =>
-  !usernameErr.value && !emailErr.value && !passwordErr.value && !confirmErr.value && form.value.full_name
+  !usernameErr.value && !emailErr.value && !passwordErr.value && !confirmErr.value && form.value.full_name && confirmDetails.value
 )
 
 /* ── Submit ── */
 function handleSubmit() {
   // Touch all fields to trigger validation display
   ['full_name','username','email','password','confirm_password'].forEach(touch)
+  if (!confirmDetails.value) return
   if (!canSubmit.value) return
   emit('submit', { ...form.value })
 }
@@ -302,5 +356,23 @@ function handleSubmit() {
   color: #fca5a5;
   margin-top: 0.15rem;
   display: block;
+}
+
+.checkbox-group {
+  margin-top: 1rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--text-1);
+}
+
+.checkbox-label input {
+  margin-top: 0.15rem;
+  width: 1rem;
+  height: 1rem;
 }
 </style>

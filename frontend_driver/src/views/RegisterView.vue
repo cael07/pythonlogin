@@ -252,6 +252,9 @@
           <RegisterForm
             v-if="step === 5"
             :face-image="faceImage"
+            :license-number="licenseNumber"
+            :or-renewal-date="orRenewalDate"
+            :plate-number="crPlate"
             :loading="loading"
             :initial-full-name="licenseName || crOwnerName"
             @submit="handleRegister"
@@ -286,12 +289,8 @@
 
           <!-- Guideline rect — turns green when document detected -->
           <div class="camera-modal-guideline">
-            <div class="camera-modal-guideline-rect" :class="{ aligned: docAligned, capturing: docCountdown > 0 }">
-              <!-- Countdown ring when holding -->
-              <div v-if="docCountdown > 0" class="doc-countdown-ring">
-                <span class="doc-countdown-number">{{ docCountdown }}</span>
-              </div>
-              <span v-else class="guideline-text">
+            <div class="camera-modal-guideline-rect" :class="{ aligned: docAligned }">
+              <span class="guideline-text">
                 {{ docAligned ? '✓ DOCUMENT DETECTED' : 'ALIGN DOCUMENT EDGES' }}
               </span>
             </div>
@@ -1793,14 +1792,6 @@ async function handleRegister(formData) {
 @keyframes countdownPop {
   from { transform: scale(0.6); opacity: 0.4; }
   to   { transform: scale(1);   opacity: 1;   }
-}
-
-.doc-countdown-number {
-  font-size: 2.8rem;
-  font-weight: 800;
-  color: #22c55e;
-  line-height: 1;
-  text-shadow: 0 0 20px rgba(34, 197, 94, 0.8);
 }
 
 /* Hint bar inside viewfinder */
